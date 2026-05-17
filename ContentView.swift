@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import FirebaseAuth
 
 enum AppLanguage: String, CaseIterable, Identifiable {
     case english = "English"
@@ -51,15 +52,24 @@ final class PenpalGroupStore: ObservableObject {
 
 struct ContentView: View {
     
-    @AppStorage("isSignedUp") private var isSignedUp: Bool = false
     @AppStorage("homeResetID") private var homeResetID: String = UUID().uuidString
+    @State private var firebaseUser: User? = Auth.auth().currentUser
     
     var body: some View {
-        if isSignedUp {
-            HomeDashboardView()
-                .id(homeResetID)
-        } else {
-            LoginView()
+        Group {
+            if firebaseUser != nil {
+                HomeDashboardView()
+                    .id(homeResetID)
+            } else {
+                LoginView()
+            }
+        }
+        .onAppear {
+            firebaseUser = Auth.auth().currentUser
+            
+            Auth.auth().addStateDidChangeListener { _, user in
+                firebaseUser = user
+            }
         }
     }
 }
@@ -70,11 +80,9 @@ struct ContentView: View {
 
 struct LoginView: View {
     
-    @AppStorage("isSignedUp") private var isSignedUp: Bool = false
     @AppStorage("username") private var savedUsername: String = ""
     @AppStorage("displayName") private var savedDisplayName: String = ""
     @AppStorage("email") private var savedEmail: String = ""
-    @AppStorage("password") private var savedPassword: String = ""
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
     
     @State private var isLoginMode: Bool = true
@@ -85,6 +93,8 @@ struct LoginView: View {
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
     @State private var errorMessage: String = ""
+    @State private var successMessage: String = ""
+    @State private var isLoading: Bool = false
     
     @State private var showPassword: Bool = false
     @State private var showConfirmPassword: Bool = false
@@ -117,6 +127,10 @@ struct LoginView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
+                .onChange(of: isLoginMode) { _, _ in
+                    errorMessage = ""
+                    successMessage = ""
+                }
                 
                 VStack(spacing: 14) {
                     
@@ -127,20 +141,20 @@ struct LoginView: View {
                             .background(Color.gray.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                         
-                        TextField("Email", text: $email)
-                            .keyboardType(.emailAddress)
+                        TextField("Username", text: $username)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .textContentType(.emailAddress)
+                            .textContentType(.username)
                             .padding()
                             .background(Color.gray.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
                     
-                    TextField("Username", text: $username)
+                    TextField("Email", text: $email)
+                        .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .textContentType(.username)
+                        .textContentType(.emailAddress)
                         .padding()
                         .background(Color.gray.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -165,20 +179,40 @@ struct LoginView: View {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                
+                if !successMessage.isEmpty {
+                    Text(successMessage)
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
                 }
                 
                 Button {
                     isLoginMode ? logIn() : signUp()
                 } label: {
-                    Text(isLoginMode ? "Log in" : "Create Profile")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.black)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    if isLoading {
+                        ProgressView()
+                            .tint(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.black)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    } else {
+                        Text(isLoginMode ? "Log in" : "Create Profile")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.black)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
                 }
                 .padding(.horizontal)
+                .disabled(isLoading)
                 
                 if isLoginMode {
                     Button {
@@ -198,6 +232,9 @@ struct LoginView: View {
     private func signUp() {
         let cleanUsername = clean(username)
         let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        
+        errorMessage = ""
+        successMessage = ""
         
         guard !cleanUsername.isEmpty else {
             errorMessage = "Please enter a username."
@@ -219,34 +256,81 @@ struct LoginView: View {
             return
         }
         
-        savedUsername = cleanUsername
-        savedDisplayName = displayName.isEmpty ? cleanUsername.capitalized : displayName
-        savedEmail = cleanEmail
-        savedPassword = password
-        isSignedUp = true
+        isLoading = true
+        
+        Auth.auth().createUser(withEmail: cleanEmail, password: password) { result, error in
+            isLoading = false
+            
+            if let error = error {
+                errorMessage = error.localizedDescription
+                return
+            }
+            
+            savedUsername = cleanUsername
+            savedDisplayName = displayName.isEmpty ? cleanUsername.capitalized : displayName
+            savedEmail = cleanEmail
+            
+            let changeRequest = Auth.auth().currentUser?.createProfileChangeRequest()
+            changeRequest?.displayName = savedDisplayName
+            changeRequest?.commitChanges { error in
+                if let error = error {
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
     
     private func logIn() {
-        let cleanUsername = clean(username)
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         
-        guard cleanUsername == savedUsername else {
-            errorMessage = "Username not found."
+        errorMessage = ""
+        successMessage = ""
+        
+        guard cleanEmail.contains("@") && cleanEmail.contains(".") else {
+            errorMessage = "Please enter your email."
             return
         }
         
-        guard password == savedPassword else {
-            errorMessage = "Wrong password."
+        guard !password.isEmpty else {
+            errorMessage = "Please enter your password."
             return
         }
         
-        isSignedUp = true
+        isLoading = true
+        
+        Auth.auth().signIn(withEmail: cleanEmail, password: password) { result, error in
+            isLoading = false
+            
+            if let error = error {
+                errorMessage = error.localizedDescription
+                return
+            }
+            
+            savedEmail = cleanEmail
+            
+            if let user = result?.user {
+                savedDisplayName = user.displayName ?? savedDisplayName
+            }
+        }
     }
     
     private func forgotPassword() {
-        if savedEmail.isEmpty {
-            errorMessage = "No email is saved for this account."
-        } else {
-            errorMessage = "Password reset would be sent to \(savedEmail)."
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        
+        errorMessage = ""
+        successMessage = ""
+        
+        guard cleanEmail.contains("@") && cleanEmail.contains(".") else {
+            errorMessage = "Enter your email first, then tap forgot password."
+            return
+        }
+        
+        Auth.auth().sendPasswordReset(withEmail: cleanEmail) { error in
+            if let error = error {
+                errorMessage = error.localizedDescription
+            } else {
+                successMessage = "Password reset email sent to \(cleanEmail)."
+            }
         }
     }
     
@@ -266,22 +350,29 @@ struct PasswordInputField: View {
     @Binding var isVisible: Bool
     
     var body: some View {
+        
         HStack {
+            
             Group {
+                
                 if isVisible {
+                    
                     TextField(title, text: $text)
-                        .textContentType(.oneTimeCode)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    
                 } else {
+                    
                     SecureField(title, text: $text)
-                        .textContentType(.oneTimeCode)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 }
             }
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
             
             Button {
                 isVisible.toggle()
             } label: {
+                
                 Image(systemName: isVisible ? "eye.slash" : "eye")
                     .foregroundStyle(.secondary)
             }
@@ -440,18 +531,21 @@ struct HomeDashboardView: View {
 
 struct ProfileSettingsView: View {
     
-    @AppStorage("isSignedUp") private var isSignedUp: Bool = false
     @AppStorage("username") private var username: String = ""
     @AppStorage("displayName") private var displayName: String = ""
     @AppStorage("email") private var email: String = ""
-    @AppStorage("password") private var password: String = ""
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
     @AppStorage("homeResetID") private var homeResetID: String = UUID().uuidString
     
     @State private var showDeleteConfirmation = false
+    @State private var errorMessage: String = ""
     
     private var language: AppLanguage {
         AppLanguage(rawValue: languageRaw) ?? .english
+    }
+    
+    private var firebaseUser: User? {
+        Auth.auth().currentUser
     }
     
     var selectedLanguage: Binding<AppLanguage> {
@@ -469,14 +563,16 @@ struct ProfileSettingsView: View {
                     .font(.system(size: 32, weight: .light, design: .serif))
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(displayName.isEmpty ? username.capitalized : displayName)
+                    Text(displayNameFromFirebase)
                         .font(.headline)
                     
-                    Text("@\(username)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if !username.isEmpty {
+                        Text("@\(username)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     
-                    Text(email)
+                    Text(emailFromFirebase)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -495,6 +591,12 @@ struct ProfileSettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                }
+                
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
                 
                 Button {
@@ -538,30 +640,49 @@ struct ProfileSettingsView: View {
             
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes your profile, login data, drafts, saved magazines and group data from this prototype.")
+            Text("This removes your Firebase account from PenPal on this prototype.")
         }
     }
     
+    private var displayNameFromFirebase: String {
+        firebaseUser?.displayName
+        ?? (displayName.isEmpty ? username.capitalized : displayName)
+    }
+    
+    private var emailFromFirebase: String {
+        firebaseUser?.email ?? email
+    }
+    
     private func signOut() {
-        isSignedUp = false
+        do {
+            try Auth.auth().signOut()
+            homeResetID = UUID().uuidString
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
     
     private func deleteProfile() {
-        isSignedUp = false
+        guard let user = Auth.auth().currentUser else { return }
         
-        username = ""
-        displayName = ""
-        email = ""
-        password = ""
-        
-        IssueDraftStore.shared.pages.removeAll()
-        MagazineArchiveStore.shared.savedIssues.removeAll()
-        PenpalGroupStore.shared.groups.removeAll()
-        
-        homeResetID = UUID().uuidString
+        user.delete { error in
+            if let error = error {
+                errorMessage = error.localizedDescription
+                return
+            }
+            
+            username = ""
+            displayName = ""
+            email = ""
+            
+            IssueDraftStore.shared.pages.removeAll()
+            MagazineArchiveStore.shared.savedIssues.removeAll()
+            PenpalGroupStore.shared.groups.removeAll()
+            
+            homeResetID = UUID().uuidString
+        }
     }
 }
-
 // ============================================================
 // MARK: - PREPRINT REVIEW
 // ============================================================
