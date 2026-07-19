@@ -40,7 +40,6 @@
 		3DA400012FF1000000AA0001 /* NotificationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA400062FF1000000AA0001 /* NotificationPreferences.swift */; };
 		3DA400022FF1000000AA0001 /* NotificationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA400072FF1000000AA0001 /* NotificationSettingsView.swift */; };
 		3DA400032FF1000000AA0001 /* SubscriptionDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA400082FF1000000AA0001 /* SubscriptionDetailsView.swift */; };
-		3DA400042FF1000000AA0001 /* FounderSupporterHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA400092FF1000000AA0001 /* FounderSupporterHubView.swift */; };
 		3DA400052FF1000000AA0001 /* PenPalHeaderMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA4000A2FF1000000AA0001 /* PenPalHeaderMenu.swift */; };
 		3DB79DC72FB9F30A00D97848 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 3DB79DC62FB9F30A00D97848 /* FirebaseAnalytics */; };
 		3DB79DC92FB9F30A00D97848 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 3DB79DC82FB9F30A00D97848 /* FirebaseAuth */; };
@@ -112,7 +111,6 @@
 		3DA400062FF1000000AA0001 /* NotificationPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPreferences.swift; sourceTree = "<group>"; };
 		3DA400072FF1000000AA0001 /* NotificationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsView.swift; sourceTree = "<group>"; };
 		3DA400082FF1000000AA0001 /* SubscriptionDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionDetailsView.swift; sourceTree = "<group>"; };
-		3DA400092FF1000000AA0001 /* FounderSupporterHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FounderSupporterHubView.swift; sourceTree = "<group>"; };
 		3DA4000A2FF1000000AA0001 /* PenPalHeaderMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenPalHeaderMenu.swift; sourceTree = "<group>"; };
 		3DB79D862FB794EB00D97848 /* TravelingFriends.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TravelingFriends.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DB79D952FB794EC00D97848 /* TravelingFriendsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TravelingFriendsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -205,7 +203,6 @@
 				3DA400062FF1000000AA0001 /* NotificationPreferences.swift */,
 				3DA400072FF1000000AA0001 /* NotificationSettingsView.swift */,
 				3DA400082FF1000000AA0001 /* SubscriptionDetailsView.swift */,
-				3DA400092FF1000000AA0001 /* FounderSupporterHubView.swift */,
 				3DA4000A2FF1000000AA0001 /* PenPalHeaderMenu.swift */,
 				3D7B22652FC2EEE400A428A4 /* FriendRequestsView.swift */,
 				3D7B22772FC7466700A428A4 /* FriendsStore.swift */,
@@ -421,7 +418,6 @@
 				3DA400012FF1000000AA0001 /* NotificationPreferences.swift in Sources */,
 				3DA400022FF1000000AA0001 /* NotificationSettingsView.swift in Sources */,
 				3DA400032FF1000000AA0001 /* SubscriptionDetailsView.swift in Sources */,
-				3DA400042FF1000000AA0001 /* FounderSupporterHubView.swift in Sources */,
 				3DA400052FF1000000AA0001 /* PenPalHeaderMenu.swift in Sources */,
 				3D90000B2FE31A0000AA0001 /* AppLocalization.swift in Sources */,
 				3D9000012FE31A0000AA0001 /* MagazineTemplateLocalization.swift in Sources */,
