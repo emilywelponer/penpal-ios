@@ -6,71 +6,78 @@ struct PenPalHeaderMenu: View {
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
     let isFounderSupporter: Bool
     var plan: PenPalPlan = .free
+    @State private var subscriptionMessage = ""
 
-    private var canOpenFounderHub: Bool {
+    private var canOpenPenPalLab: Bool {
         !PenPalLabConfiguration.restrictPenPalLabToFounders || isFounderSupporter
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        ZStack {
             HStack(spacing: 8) {
                 Text("PenPal")
                     .font(.system(size: 44, weight: .light, design: .serif))
 
                 headerBadge
             }
+            .frame(maxWidth: .infinity)
 
-            Spacer()
-
-            Menu {
-                NavigationLink {
-                    SubscriptionDetailsView(plan: plan)
-                } label: {
-                    Label(appText("Your PenPal Plan", languageRaw), systemImage: "person.crop.circle")
-                }
-
-                Button {
-                    // StoreKit upgrade flow is intentionally not implemented in this navigation cleanup.
-                } label: {
-                    Label(appText("Upgrade or change plan", languageRaw), systemImage: "arrow.up.circle")
-                }
-
-                NavigationLink {
-                    SubscriptionDetailsView(plan: plan)
-                } label: {
-                    Label(appText("Compare plans", languageRaw), systemImage: "rectangle.3.group")
-                }
-
-                Button {
-                    // Restore purchases will connect to StoreKit when subscriptions are implemented.
-                } label: {
-                    Label(appText("Restore purchases", languageRaw), systemImage: "arrow.clockwise")
-                }
-
-                if canOpenFounderHub {
-                    NavigationLink {
-                        FounderSupporterHubView(isFounderSupporter: isFounderSupporter)
-                    } label: {
-                        Label(appText("PenPal Lab", languageRaw), systemImage: "flask.fill")
-                    }
-                }
-
-                NavigationLink {
-                    AboutPenPalView()
-                } label: {
-                    Label(appText("About PenPal", languageRaw), systemImage: "info.circle")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.headline)
-                    .foregroundStyle(PenPalStyle.ink)
-                    .frame(width: 38, height: 38)
-                    .background(Color.black.opacity(0.06))
-                    .clipShape(Circle())
+            HStack {
+                Spacer()
+                menuButton
             }
-            .accessibilityLabel(appText("More PenPal options", languageRaw))
         }
         .padding(.horizontal, 20)
+        .alert(appText("Subscriptions", languageRaw), isPresented: Binding(
+            get: { !subscriptionMessage.isEmpty },
+            set: { newValue in
+                if !newValue { subscriptionMessage = "" }
+            }
+        )) {
+            Button(appText("OK", languageRaw), role: .cancel) {}
+        } message: {
+            Text(subscriptionMessage)
+        }
+    }
+
+    private var menuButton: some View {
+        Menu {
+            NavigationLink {
+                SubscriptionDetailsView(plan: plan)
+            } label: {
+                Label(appText("Your PenPal Plan", languageRaw), systemImage: "person.crop.circle")
+            }
+
+            NavigationLink {
+                SubscriptionUpgradeView(currentPlan: plan)
+            } label: {
+                Label(appText("Upgrade or change plan", languageRaw), systemImage: "arrow.up.circle")
+            }
+
+            Button {
+                Task {
+                    subscriptionMessage = await SubscriptionActions.restorePurchases(languageRaw: languageRaw)
+                }
+            } label: {
+                Label(appText("Restore purchases", languageRaw), systemImage: "arrow.clockwise")
+            }
+
+            if canOpenPenPalLab {
+                NavigationLink {
+                    PenPalLabView()
+                } label: {
+                    Label(appText("PenPal Lab", languageRaw), systemImage: "flask.fill")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.headline)
+                .foregroundStyle(PenPalStyle.ink)
+                .frame(width: 38, height: 38)
+                .background(Color.black.opacity(0.06))
+                .clipShape(Circle())
+        }
+        .accessibilityLabel(appText("More PenPal options", languageRaw))
     }
 
     @ViewBuilder
@@ -85,15 +92,15 @@ struct PenPalHeaderMenu: View {
             .buttonStyle(.plain)
         case .founder:
             NavigationLink {
-                FounderSupporterHubView(isFounderSupporter: isFounderSupporter)
+                PenPalLabView()
             } label: {
                 PlanBadge(plan: .founder)
             }
             .buttonStyle(.plain)
         case .free:
-            if canOpenFounderHub, isFounderSupporter {
+            if canOpenPenPalLab, isFounderSupporter {
                 NavigationLink {
-                    FounderSupporterHubView(isFounderSupporter: isFounderSupporter)
+                    PenPalLabView()
                 } label: {
                     PlanBadge(plan: .founder)
                 }
@@ -120,25 +127,5 @@ private struct PlanBadge: View {
         .background(Color.black.opacity(0.06))
         .clipShape(Capsule())
         .accessibilityLabel(appText(plan.titleKey, languageRaw))
-    }
-}
-
-private struct AboutPenPalView: View {
-    @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("PenPal")
-                .font(.system(size: 42, weight: .light, design: .serif))
-            Text(appText("A quieter place for shared monthly magazines.", languageRaw))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PenPalStyle.background.ignoresSafeArea())
-        .navigationTitle(appText("About PenPal", languageRaw))
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

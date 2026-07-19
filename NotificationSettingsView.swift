@@ -29,7 +29,7 @@ struct NotificationSettingsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 30)
                 } else {
-                    settingsCard
+                    masterPreferenceCard
                 }
 
                 if !message.isEmpty {
@@ -54,63 +54,86 @@ struct NotificationSettingsView: View {
     }
 
     private var permissionStatusCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: permissionManager.status == .enabled ? "bell.badge" : "bell.slash")
-                    .frame(width: 34, height: 34)
-                    .background(Color.black.opacity(0.08))
-                    .clipShape(Circle())
+        Button {
+            handlePermissionCardTap()
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: permissionManager.status == .enabled ? "bell.badge" : "bell.slash")
+                        .frame(width: 34, height: 34)
+                        .background(Color.black.opacity(0.08))
+                        .clipShape(Circle())
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(appText("iPhone notifications", languageRaw))
-                        .font(.headline)
-                    Text(appText(permissionManager.status.displayText, languageRaw))
-                        .font(.caption)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(appText("iPhone notifications", languageRaw))
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(appText(permissionManager.status.displayText, languageRaw))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: permissionManager.status == .notDetermined ? "bell.badge" : "chevron.right")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
 
-                Spacer()
-            }
-
-            if permissionManager.status == .disabled {
-                Text(appText("Notifications are disabled in iPhone Settings.", languageRaw))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Button {
-                    permissionManager.openSettings()
-                } label: {
-                    Text(appText("Open iPhone Settings", languageRaw))
-                        .font(.subheadline.weight(.semibold))
+                if permissionManager.status == .disabled {
+                    Text(appText("Notifications are disabled in iPhone Settings.", languageRaw))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if permissionManager.status == .enabled {
+                    Text(appText("Manage iPhone notification delivery in Settings.", languageRaw))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(appText("Tap to allow iPhone notifications for PenPal.", languageRaw))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
             }
+            .padding()
+            .background(Color.gray.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 20))
         }
-        .padding()
-        .background(Color.gray.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .buttonStyle(.plain)
     }
 
-    private var settingsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private var masterPreferenceCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Toggle(isOn: Binding(
                 get: { preferences.masterEnabled },
                 set: { updateMaster($0) }
             )) {
-                Text(appText("Allow PenPal notifications", languageRaw))
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(appText("Allow PenPal notifications", languageRaw))
+                        .font(.headline)
+                    Text(appText("Covers friend requests, groups, magazines, activity, margin notes and PenPal announcements.", languageRaw))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .tint(.black)
 
-            Divider()
+            if permissionManager.status == .disabled {
+                HStack(spacing: 10) {
+                    Text(appText("Enable notifications in iPhone Settings to receive PenPal notifications.", languageRaw))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-            preferenceToggle("Friend requests and new friends", binding: \.friendActivity)
-            preferenceToggle("Group invitations and group updates", binding: \.groupUpdates)
-            preferenceToggle("New magazines", binding: \.newMagazines)
-            preferenceToggle("Magazine activity", binding: \.magazineActivity)
-            preferenceToggle("Margin notes", binding: \.marginNotes)
-            preferenceToggle("Replies and reactions", binding: \.repliesAndReactions)
-            preferenceToggle("PenPal announcements", binding: \.penPalAnnouncements)
+                    Spacer()
+
+                    Button {
+                        permissionManager.openSettings()
+                    } label: {
+                        Text(appText("Open Settings", languageRaw))
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
 
             if isSaving {
                 HStack(spacing: 8) {
@@ -126,24 +149,6 @@ struct NotificationSettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
-    private func preferenceToggle(
-        _ title: String,
-        binding keyPath: WritableKeyPath<NotificationPreferences, Bool>
-    ) -> some View {
-        Toggle(isOn: Binding(
-            get: { preferences[keyPath: keyPath] },
-            set: { value in
-                preferences[keyPath: keyPath] = value
-                savePreferences()
-            }
-        )) {
-            Text(appText(title, languageRaw))
-                .font(.subheadline)
-        }
-        .tint(.black)
-        .disabled(!preferences.masterEnabled)
-    }
-
     private func load() {
         permissionManager.refreshStatus()
         FirestoreManager.shared.fetchNotificationPreferences { loaded in
@@ -155,11 +160,11 @@ struct NotificationSettingsView: View {
     private func updateMaster(_ enabled: Bool) {
         if enabled, permissionManager.status == .notDetermined {
             permissionManager.requestPermission { granted in
-                preferences.masterEnabled = granted
                 if granted {
                     preferences = .enabledDefaults
                     message = appText("Notification preferences saved.", languageRaw)
                 } else {
+                    preferences.masterEnabled = false
                     message = appText("Notifications are disabled in iPhone Settings.", languageRaw)
                 }
                 savePreferences()
@@ -167,8 +172,28 @@ struct NotificationSettingsView: View {
             return
         }
 
+        if enabled, permissionManager.status == .disabled {
+            preferences.masterEnabled = false
+            message = appText("Enable notifications in iPhone Settings to receive PenPal notifications.", languageRaw)
+            return
+        }
+
         preferences.masterEnabled = enabled
         savePreferences()
+    }
+
+    private func handlePermissionCardTap() {
+        switch permissionManager.status {
+        case .notDetermined:
+            permissionManager.requestPermission { granted in
+                if granted {
+                    preferences = .enabledDefaults
+                    savePreferences()
+                }
+            }
+        case .disabled, .enabled:
+            permissionManager.openSettings()
+        }
     }
 
     private func savePreferences() {

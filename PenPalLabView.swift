@@ -17,12 +17,14 @@ struct PenPalLabView: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
-                } else if !service.canAccessLab {
-                    accessDenied
                 } else {
-                    controls
-                    roadmap
-                    suggestionList
+                    if shouldShowFounderAccessCard {
+                        founderAccessCard
+                    }
+
+                    labSections
+                        .blur(radius: shouldShowFounderAccessCard ? 3 : 0)
+                        .disabled(shouldShowFounderAccessCard)
                 }
             }
             .padding()
@@ -74,8 +76,24 @@ struct PenPalLabView: View {
         }
     }
 
-    private var controls: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private var shouldShowFounderAccessCard: Bool {
+        PenPalLabConfiguration.restrictPenPalLabToFounders && !service.currentUserIsFounder
+    }
+
+    private var labSections: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            ideasAndVotingSection
+            submitFeedbackSection
+            roadmap
+            founderBenefitsSection
+        }
+    }
+
+    private var submitFeedbackSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(appText("Submit feedback", languageRaw))
+                .font(.headline)
+
             Button {
                 showSuggestionForm = true
             } label: {
@@ -94,6 +112,13 @@ struct PenPalLabView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 20))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private var ideasAndVotingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(appText("Ideas and voting", languageRaw))
+                .font(.headline)
 
             Picker(appText("Sort suggestions", languageRaw), selection: $sortOption) {
                 ForEach(PenPalLabSortOption.allCases) { option in
@@ -101,6 +126,8 @@ struct PenPalLabView: View {
                 }
             }
             .pickerStyle(.segmented)
+
+            suggestionList
         }
     }
 
@@ -132,9 +159,6 @@ struct PenPalLabView: View {
 
     private var suggestionList: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(appText("Suggestions", languageRaw))
-                .font(.headline)
-
             if service.isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity)
@@ -163,13 +187,40 @@ struct PenPalLabView: View {
         }
     }
 
-    private var accessDenied: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(appText("PenPal Lab is only available to Founder Supporters.", languageRaw))
+    private var founderBenefitsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(appText("Founder benefits", languageRaw))
                 .font(.headline)
-            Text(appText("This area is not available for your account right now.", languageRaw))
+
+            VStack(alignment: .leading, spacing: 10) {
+                Label(appText("Early access to PenPal Lab experiments.", languageRaw), systemImage: "flask.fill")
+                Label(appText("Vote on ideas and help shape the roadmap.", languageRaw), systemImage: "heart")
+                Label(appText("A subtle Founder badge inside PenPal Lab.", languageRaw), systemImage: "sparkles")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.gray.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    private var founderAccessCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(appText("PenPal Lab is included with Founder Supporter.", languageRaw))
+                .font(.headline)
+            Text(appText("Upgrade to unlock ideas, voting, feedback and the roadmap.", languageRaw))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            NavigationLink {
+                SubscriptionUpgradeView(currentPlan: .free)
+            } label: {
+                Text(appText("Upgrade or change plan", languageRaw))
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.plain)
         }
         .padding()
         .background(Color.gray.opacity(0.08))
