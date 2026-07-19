@@ -16,6 +16,21 @@ final class AuthViewModel: ObservableObject {
     
     init() {
         _ = Auth.auth().addStateDidChangeListener { _, user in
+            print("AUTH_STATE_CHANGED", user?.uid ?? "nil")
+            logAuthDiagnostics("AuthViewModel auth state changed")
+            FirestoreManager.shared.authStateChanged(user: user)
+            if user == nil {
+                print("AUTH_STATE_CHANGED_RECENT_ACTION", AuthEventTracker.recentActionSummary())
+                print("AUTH_FORCE_LOGOUT", "AuthViewModel auth state nil")
+                UserDefaults.standard.set(false, forKey: "isLoggedIn")
+                UserDefaults.standard.removeObject(forKey: "currentUserID")
+                FirestoreManager.shared.removeAllListeners(reason: "AuthViewModel auth state nil")
+                PenpalGroupStore.shared.clear()
+                FriendsNewsStore.shared.clear()
+                FriendsStore.shared.friends.removeAll()
+                MagazineArchiveStore.shared.savedIssues.removeAll()
+                IssueDraftStore.shared.pages.removeAll()
+            }
             self.user = user
         }
     }
@@ -45,6 +60,9 @@ final class AuthViewModel: ObservableObject {
                 displayName: displayName,
                 email: email
             )
+            AuthEventTracker.record("LOGIN_SUCCESS signup \(user.uid)")
+            PushNotificationManager.shared.refreshAndSaveToken()
+            logAuthDiagnostics("AuthViewModel signup success")
         }
     }
     
@@ -52,6 +70,12 @@ final class AuthViewModel: ObservableObject {
         Auth.auth().signIn(withEmail: email, password: password) { _, error in
             if let error = error {
                 self.errorMessage = error.localizedDescription
+            } else {
+                if let uid = Auth.auth().currentUser?.uid {
+                    AuthEventTracker.record("LOGIN_SUCCESS \(uid)")
+                }
+                PushNotificationManager.shared.refreshAndSaveToken()
+                logAuthDiagnostics("AuthViewModel login success")
             }
         }
     }
@@ -66,6 +90,11 @@ final class AuthViewModel: ObservableObject {
     
     func signOut() {
         do {
+            AuthEventTracker.record("SIGN_OUT_CALLED AuthViewModel")
+            PushNotificationManager.shared.deleteCurrentTokenForLogout()
+            UserDefaults.standard.set(false, forKey: "isLoggedIn")
+            UserDefaults.standard.removeObject(forKey: "currentUserID")
+            FirestoreManager.shared.removeAllListeners(reason: "AuthViewModel signOut")
             try Auth.auth().signOut()
         } catch {
             errorMessage = error.localizedDescription
