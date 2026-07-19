@@ -1,0 +1,43 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /issueDrafts/{ownerID}/{draftID}/previews/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == ownerID;
+      allow write: if request.auth != null
+        && request.auth.uid == ownerID
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+    }
+
+    match /issueDrafts/{ownerID}/{draftID}/draftData/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == ownerID;
+      allow write: if request.auth != null
+        && request.auth.uid == ownerID
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType == 'application/json';
+    }
+
+    match /issueDrafts/{ownerID}/{draftID}/images/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == ownerID;
+      allow write: if request.auth != null
+        && request.auth.uid == ownerID
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+    }
+
+    match /publishedIssues/{issueID}/pages/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+    }
+
+    match /publishedIssues/{issueID}/images/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+    }
+  }
+}

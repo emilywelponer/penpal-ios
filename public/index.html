@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Join PenPal Group</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #faf7f1;
+      color: #1f1b18;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    main {
+      width: min(88vw, 420px);
+      text-align: center;
+      padding: 28px;
+      background: #fffdf8;
+      border: 1px solid rgba(31, 27, 24, 0.12);
+      border-radius: 24px;
+      box-shadow: 0 18px 50px rgba(31, 27, 24, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      font-weight: 400;
+    }
+
+    p {
+      margin: 0 0 22px;
+      color: rgba(31, 27, 24, 0.68);
+      line-height: 1.45;
+    }
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 22px;
+      color: white;
+      background: #1f1b18;
+      border-radius: 999px;
+      text-decoration: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>PenPal</h1>
+    <p>Open this invitation in the PenPal app to join the group.</p>
+    <a id="openApp" href="#">Open PenPal</a>
+  </main>
+
+  <script>
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    const groupID = parts[0] === "join-group" ? parts[1] : "";
+    const appURL = groupID ? `penpal://join-group/${encodeURIComponent(groupID)}` : "penpal://";
+    const link = document.getElementById("openApp");
+    link.href = appURL;
+
+    setTimeout(() => {
+      window.location.href = appURL;
+    }, 350);
+  </script>
+</body>
+</html>
