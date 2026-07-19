@@ -60,7 +60,7 @@ final class NotificationPermissionManager: ObservableObject {
         }
     }
 
-    private func requestPermission() {
+    func requestPermission(completion: ((Bool) -> Void)? = nil) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error {
                 print("NOTIFICATION_PERMISSION_STATUS", "error", error.localizedDescription)
@@ -73,11 +73,12 @@ final class NotificationPermissionManager: ObservableObject {
                     UIApplication.shared.registerForRemoteNotifications()
                 }
                 self.refreshStatus()
+                completion?(granted)
             }
         }
     }
 
-    private func openSettings() {
+    func openSettings() {
         guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(settingsURL)
     }

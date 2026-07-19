@@ -1155,6 +1155,7 @@ struct HomeDashboardView: View {
     @State private var groupUnreadCounts: [String: Int] = [:]
     @State private var notificationIssue: PublishedIssueModel?
     @State private var pendingMarginNoteRoute: MarginNoteNotificationRoute?
+    @State private var isFounderSupporter = false
 
     
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
@@ -1186,6 +1187,7 @@ struct HomeDashboardView: View {
                 profilePattern = profile.profilePattern ?? "plain"
                 nameFontValue = profile.nameFont ?? "serif"
                 nameColorHex = profile.nameColorHex ?? "#000000"
+                isFounderSupporter = profile.founderSupporter
             }
         }
     }
@@ -1199,8 +1201,7 @@ struct HomeDashboardView: View {
                 VStack(spacing: 26) {
                     Spacer().frame(height: 20)
                     
-                    Text("PenPal")
-                        .font(.system(size: 44, weight: .light, design: .serif))
+                    PenPalHeaderMenu(isFounderSupporter: isFounderSupporter)
                     
                     Text(appText("Stay in each other's chapters.", languageRaw))
                         .font(.subheadline)
@@ -1530,9 +1531,6 @@ struct ProfileAccountSettingsSection: View {
     @State private var confirmPassword = ""
     @State private var reauthErrorMessage = ""
     @State private var showConfirmPassword = false
-    @State private var marginNoteNotificationsEnabled = true
-    @State private var isSavingMarginNotePreference = false
-    @State private var labFounderSupporter = false
 
     private var selectedLanguage: Binding<AppLanguage> {
         Binding(
@@ -1579,8 +1577,8 @@ struct ProfileAccountSettingsSection: View {
             .background(Color.gray.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 22))
 
-            Button {
-                notificationPermissionManager.handleNotificationsRowTap()
+            NavigationLink {
+                NotificationSettingsView()
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "bell")
@@ -1616,39 +1614,6 @@ struct ProfileAccountSettingsSection: View {
                 }
             }
 
-            Toggle(isOn: Binding(
-                get: { marginNoteNotificationsEnabled },
-                set: { updateMarginNoteNotificationPreference($0) }
-            )) {
-                HStack(spacing: 12) {
-                    Image(systemName: "envelope.badge")
-                        .frame(width: 34, height: 34)
-                        .background(Color.black.opacity(0.08))
-                        .clipShape(Circle())
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(appText("Margin note notifications", languageRaw))
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-
-                        Text(appText("Notify me when someone leaves a note.", languageRaw))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if isSavingMarginNotePreference {
-                        ProgressView()
-                    }
-                }
-            }
-            .tint(.black)
-            .padding()
-            .background(Color.gray.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 22))
-            .onAppear {
-                loadMarginNoteNotificationPreference()
-            }
-
             NavigationLink {
                 PrivacyPolicyView()
             } label: {
@@ -1657,19 +1622,6 @@ struct ProfileAccountSettingsSection: View {
                     title: appText("Privacy Policy", languageRaw),
                     subtitle: appText("How your data is used", languageRaw)
                 )
-            }
-
-            if !PenPalLabConfiguration.restrictPenPalLabToFounders || labFounderSupporter {
-                NavigationLink {
-                    PenPalLabView()
-                } label: {
-                    SettingsRow(
-                        icon: "flask",
-                        title: appText("PenPal Lab", languageRaw),
-                        subtitle: appText("Help shape the future of PenPal", languageRaw)
-                    )
-                }
-                .buttonStyle(.plain)
             }
 
             if !errorMessage.isEmpty {
@@ -1770,27 +1722,6 @@ struct ProfileAccountSettingsSection: View {
             clearLocalStores()
         } catch {
             errorMessage = error.localizedDescription
-        }
-    }
-
-    private func loadMarginNoteNotificationPreference() {
-        FirestoreManager.shared.fetchMarginNoteNotificationsEnabled { enabled in
-            marginNoteNotificationsEnabled = enabled
-        }
-        FirestoreManager.shared.fetchCurrentUserProfile { profile in
-            labFounderSupporter = profile?.founderSupporter ?? false
-        }
-    }
-
-    private func updateMarginNoteNotificationPreference(_ enabled: Bool) {
-        marginNoteNotificationsEnabled = enabled
-        isSavingMarginNotePreference = true
-        FirestoreManager.shared.updateMarginNoteNotificationsEnabled(enabled) { error in
-            isSavingMarginNotePreference = false
-            if let error {
-                errorMessage = error
-                marginNoteNotificationsEnabled.toggle()
-            }
         }
     }
 

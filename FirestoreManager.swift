@@ -255,6 +255,51 @@ final class FirestoreManager: ObservableObject {
             }
         }
     }
+
+    // MARK: Notification Preferences
+
+    func fetchNotificationPreferences(
+        completion: @escaping (NotificationPreferences) -> Void
+    ) {
+        guard let uid = authenticatedUIDForQuery("fetchNotificationPreferences") else {
+            DispatchQueue.main.async {
+                completion(NotificationPreferences())
+            }
+            return
+        }
+
+        db.collection("users").document(uid).getDocument { document, error in
+            if self.handleQueryError(error, label: "fetchNotificationPreferences") {
+                DispatchQueue.main.async {
+                    completion(NotificationPreferences())
+                }
+                return
+            }
+
+            let preferences = NotificationPreferences(data: document?.data() ?? [:])
+            DispatchQueue.main.async {
+                completion(preferences)
+            }
+        }
+    }
+
+    func updateNotificationPreferences(
+        _ preferences: NotificationPreferences,
+        completion: ((String?) -> Void)? = nil
+    ) {
+        guard let uid = authenticatedUIDForQuery("updateNotificationPreferences") else {
+            DispatchQueue.main.async {
+                completion?("You need to be logged in.")
+            }
+            return
+        }
+
+        db.collection("users").document(uid).updateData(preferences.firestoreData) { error in
+            DispatchQueue.main.async {
+                completion?(error.map { $0.localizedDescription })
+            }
+        }
+    }
     
     func updateMyProfileStyle(
         profileImageData: String?,
