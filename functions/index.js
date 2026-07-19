@@ -1,4 +1,4 @@
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 
@@ -208,6 +208,46 @@ exports.notifyMarginNotePublished = onDocumentCreated("MarginNotes/{noteID}", as
     });
   }
 });
+
+// MARK: PenPal Lab Feature
+
+exports.updatePenPalLabVoteCountOnCreate = onDocumentCreated(
+  "penpalLabSuggestions/{suggestionID}/votes/{userID}",
+  async (event) => {
+    const vote = event.data && event.data.data();
+    const { suggestionID, userID } = event.params;
+    if (!vote || vote.userID !== userID) {
+      logger.warn("PENPAL_LAB_VOTE_CREATE_SKIP", { suggestionID, userID });
+      return;
+    }
+
+    await updatePenPalLabVoteCount(suggestionID);
+  }
+);
+
+exports.updatePenPalLabVoteCountOnDelete = onDocumentDeleted(
+  "penpalLabSuggestions/{suggestionID}/votes/{userID}",
+  async (event) => {
+    const { suggestionID, userID } = event.params;
+    logger.info("PENPAL_LAB_VOTE_REMOVED", { suggestionID, userID });
+    await updatePenPalLabVoteCount(suggestionID);
+  }
+);
+
+async function updatePenPalLabVoteCount(suggestionID) {
+  const suggestionRef = db.collection("penpalLabSuggestions").doc(suggestionID);
+  const suggestionSnap = await suggestionRef.get();
+  if (!suggestionSnap.exists) {
+    return;
+  }
+
+  const countSnap = await suggestionRef.collection("votes").count().get();
+  const voteCount = Math.max(0, countSnap.data().count || 0);
+  await suggestionRef.update({
+    voteCount,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
 
 async function claimNotificationEvent(eventRef, data) {
   return db.runTransaction(async (transaction) => {

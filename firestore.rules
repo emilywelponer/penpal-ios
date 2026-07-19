@@ -6,6 +6,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function founderFields() {
+      return ["founderSupporter", "founderSupporterSince", "founderSupporterTier"];
+    }
+
+    function isFounderSupporter() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.founderSupporter == true;
+    }
+
+    function canAccessPenPalLab() {
+      // Development preview: all signed-in users may inspect PenPal Lab.
+      // When the app flag restrictPenPalLabToFounders becomes true, change
+      // this helper to return isFounderSupporter().
+      return signedIn();
+    }
+
     function canReadPublishedIssue(issueId) {
       // Keep margin-note reads tied to an existing published issue. The
       // publishedIssues read rule currently allows all signed-in users.
@@ -59,6 +75,50 @@ service cloud.firestore {
       return resource.data.viewedBy is list ? resource.data.viewedBy : [];
     }
 
+    function validPenPalLabCategory(category) {
+      return category in ["feature", "design", "magazine_page", "bug", "other"];
+    }
+
+    function validPenPalLabSuggestionCreate(data) {
+      return data.keys().hasOnly([
+          "authorID",
+          "authorDisplayName",
+          "title",
+          "description",
+          "category",
+          "status",
+          "isVisible",
+          "createdAt",
+          "updatedAt",
+          "voteCount"
+        ])
+        && data.keys().hasAll([
+          "authorID",
+          "authorDisplayName",
+          "title",
+          "description",
+          "category",
+          "status",
+          "isVisible",
+          "createdAt",
+          "updatedAt",
+          "voteCount"
+        ])
+        && data.authorID == request.auth.uid
+        && data.authorDisplayName is string
+        && data.authorDisplayName.size() <= 120
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 100
+        && data.description is string
+        && data.description.size() > 0
+        && data.description.size() <= 2000
+        && validPenPalLabCategory(data.category)
+        && data.status == "under_review"
+        && data.isVisible == true
+        && data.voteCount == 0;
+    }
+
     match /groups/{groupId} {
       allow read, write: if request.auth != null;
     }
@@ -68,10 +128,14 @@ service cloud.firestore {
       // retain profile reads because friends and group member lists use them.
       allow read: if request.auth != null;
       allow create, delete: if request.auth != null
-        && request.auth.uid == userId;
+        && request.auth.uid == userId
+        && !request.resource.data.keys().hasAny(founderFields());
       allow update: if request.auth != null
         && (
-          request.auth.uid == userId
+          (
+            request.auth.uid == userId
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(founderFields())
+          )
           || (
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(["friends"])
             && (
@@ -179,6 +243,27 @@ service cloud.firestore {
         && resource.data.authorID == request.auth.uid
         && resource.data.noteID == noteId
         && marginNoteIdMatches(noteId, resource.data);
+    }
+
+    // MARK: PenPal Lab Feature
+    match /penpalLabSuggestions/{suggestionId} {
+      allow read: if canAccessPenPalLab();
+      allow create: if canAccessPenPalLab()
+        && validPenPalLabSuggestionCreate(request.resource.data);
+      allow update, delete: if false;
+
+      match /votes/{userId} {
+        allow read: if canAccessPenPalLab();
+        allow create: if canAccessPenPalLab()
+          && userId == request.auth.uid
+          && request.resource.data.keys().hasOnly(["userID", "createdAt"])
+          && request.resource.data.keys().hasAll(["userID", "createdAt"])
+          && request.resource.data.userID == request.auth.uid;
+        allow delete: if canAccessPenPalLab()
+          && userId == request.auth.uid
+          && resource.data.userID == request.auth.uid;
+        allow update: if false;
+      }
     }
 
     match /notificationEvents/{eventId} {
