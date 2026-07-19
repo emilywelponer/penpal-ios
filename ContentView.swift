@@ -1148,8 +1148,11 @@ struct HomeDashboardView: View {
     @StateObject private var archiveStore = MagazineArchiveStore.shared
     @StateObject private var groupStore = PenpalGroupStore.shared
     @StateObject private var friendsNewsStore = FriendsNewsStore.shared
+    @StateObject private var marginNoteNotificationRouter = MarginNoteNotificationRouter.shared
     @State private var groupIssueListeners: [String: ListenerRegistration] = [:]
     @State private var groupUnreadCounts: [String: Int] = [:]
+    @State private var notificationIssue: PublishedIssueModel?
+    @State private var pendingMarginNoteRoute: MarginNoteNotificationRoute?
 
     
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
@@ -1328,12 +1331,22 @@ struct HomeDashboardView: View {
                 friendsNewsStore.start()
                 groupStore.loadGroups()
                 syncGroupIssueListeners()
+                if let route = marginNoteNotificationRouter.pendingRoute {
+                    openMagazine(from: route)
+                }
             }
             .onChange(of: groupStore.groups.map(\.id)) { _, _ in
                 syncGroupIssueListeners()
             }
             .onChange(of: totalUnreadGroupIssues) { _, newValue in
                 updateAppIconBadge(newValue)
+            }
+            .onChange(of: marginNoteNotificationRouter.pendingRoute) { _, route in
+                guard let route else { return }
+                openMagazine(from: route)
+            }
+            .navigationDestination(item: $notificationIssue) { issue in
+                PublishedIssueDetailView(issue: issue)
             }
         }
     }
@@ -1398,6 +1411,27 @@ struct HomeDashboardView: View {
         UNUserNotificationCenter.current().setBadgeCount(max(0, count)) { error in
             if let error {
                 print("APP_BADGE_UPDATE_ERROR", error.localizedDescription)
+            }
+        }
+    }
+
+    private func openMagazine(from route: MarginNoteNotificationRoute) {
+        guard Auth.auth().currentUser?.uid != nil else {
+            pendingMarginNoteRoute = route
+            print("BLOCKED_QUERY_NO_AUTH", "marginNoteNotificationRoute", route.magazineID)
+            return
+        }
+
+        pendingMarginNoteRoute = route
+        FirestoreManager.shared.fetchPublishedIssue(id: route.magazineID) { issue in
+            DispatchQueue.main.async {
+                guard pendingMarginNoteRoute?.id == route.id else { return }
+                if let issue {
+                    notificationIssue = issue
+                    marginNoteNotificationRouter.pendingRoute = nil
+                } else {
+                    print("MARGIN_NOTE_NOTIFICATION_ROUTE_ERROR", route.magazineID)
+                }
             }
         }
     }
@@ -1486,6 +1520,8 @@ struct ProfileAccountSettingsSection: View {
     @State private var confirmPassword = ""
     @State private var reauthErrorMessage = ""
     @State private var showConfirmPassword = false
+    @State private var marginNoteNotificationsEnabled = true
+    @State private var isSavingMarginNotePreference = false
 
     private var selectedLanguage: Binding<AppLanguage> {
         Binding(
@@ -1567,6 +1603,39 @@ struct ProfileAccountSettingsSection: View {
                 if phase == .active {
                     notificationPermissionManager.refreshStatus()
                 }
+            }
+
+            Toggle(isOn: Binding(
+                get: { marginNoteNotificationsEnabled },
+                set: { updateMarginNoteNotificationPreference($0) }
+            )) {
+                HStack(spacing: 12) {
+                    Image(systemName: "envelope.badge")
+                        .frame(width: 34, height: 34)
+                        .background(Color.black.opacity(0.08))
+                        .clipShape(Circle())
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(appText("Margin note notifications", languageRaw))
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        Text(appText("Notify me when someone leaves a note.", languageRaw))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if isSavingMarginNotePreference {
+                        ProgressView()
+                    }
+                }
+            }
+            .tint(.black)
+            .padding()
+            .background(Color.gray.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 22))
+            .onAppear {
+                loadMarginNoteNotificationPreference()
             }
 
             NavigationLink {
@@ -1677,6 +1746,24 @@ struct ProfileAccountSettingsSection: View {
             clearLocalStores()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadMarginNoteNotificationPreference() {
+        FirestoreManager.shared.fetchMarginNoteNotificationsEnabled { enabled in
+            marginNoteNotificationsEnabled = enabled
+        }
+    }
+
+    private func updateMarginNoteNotificationPreference(_ enabled: Bool) {
+        marginNoteNotificationsEnabled = enabled
+        isSavingMarginNotePreference = true
+        FirestoreManager.shared.updateMarginNoteNotificationsEnabled(enabled) { error in
+            isSavingMarginNotePreference = false
+            if let error {
+                errorMessage = error
+                marginNoteNotificationsEnabled.toggle()
+            }
         }
     }
 

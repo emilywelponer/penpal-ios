@@ -142,6 +142,7 @@ final class FirestoreManager: ObservableObject {
             "displayName": displayName,
             "email": email,
             "appLanguage": UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.english.rawValue,
+            "marginNoteNotificationsEnabled": true,
             "friends": [],
             "createdAt": Timestamp(date: Date())
         ]
@@ -203,6 +204,53 @@ final class FirestoreManager: ObservableObject {
                     nameColorHex: data["nameColorHex"] as? String
                 )
             )
+        }
+    }
+
+    // MARK: Margin Notes Feature
+
+    func fetchMarginNoteNotificationsEnabled(
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard let uid = authenticatedUIDForQuery("fetchMarginNoteNotificationsEnabled") else {
+            DispatchQueue.main.async {
+                completion(true)
+            }
+            return
+        }
+
+        db.collection("users").document(uid).getDocument { document, error in
+            if self.handleQueryError(error, label: "fetchMarginNoteNotificationsEnabled") {
+                DispatchQueue.main.async {
+                    completion(true)
+                }
+                return
+            }
+
+            let enabled = document?.data()?["marginNoteNotificationsEnabled"] as? Bool ?? true
+            DispatchQueue.main.async {
+                completion(enabled)
+            }
+        }
+    }
+
+    func updateMarginNoteNotificationsEnabled(
+        _ enabled: Bool,
+        completion: ((String?) -> Void)? = nil
+    ) {
+        guard let uid = authenticatedUIDForQuery("updateMarginNoteNotificationsEnabled") else {
+            DispatchQueue.main.async {
+                completion?("You need to be logged in.")
+            }
+            return
+        }
+
+        db.collection("users").document(uid).updateData([
+            "marginNoteNotificationsEnabled": enabled
+        ]) { error in
+            DispatchQueue.main.async {
+                completion?(error.map { $0.localizedDescription })
+            }
         }
     }
     
