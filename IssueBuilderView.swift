@@ -45,7 +45,7 @@ enum PenPalColourScheme: String, CaseIterable, Identifiable {
         case .blush: return UIColor(red: 0.665, green: 0.300, blue: 0.330, alpha: 1)
         case .sage: return UIColor(red: 0.305, green: 0.430, blue: 0.330, alpha: 1)
         case .atlantic: return UIColor(red: 0.165, green: 0.360, blue: 0.465, alpha: 1)
-        case .marine: return UIColor(red: 0.600, green: 0.760, blue: 0.870, alpha: 1)
+        case .marine: return .white
         }
     }
 }
