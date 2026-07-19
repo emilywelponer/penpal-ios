@@ -58,6 +58,212 @@ exports.notifyPublishedIssue = onDocumentCreated("publishedIssues/{issueID}", as
   }
 });
 
+exports.notifyMarginNotePublished = onDocumentCreated("MarginNotes/{noteID}", async (event) => {
+  const note = event.data && event.data.data();
+  if (!note) {
+    return;
+  }
+
+  const noteID = event.params.noteID;
+  const magazineID = typeof note.magazineID === "string" ? note.magazineID : "";
+  const noteAuthorID = typeof note.authorID === "string" ? note.authorID : "";
+  const pageIndex = Number.isInteger(note.pageIndex) ? note.pageIndex : null;
+  const text = typeof note.text === "string" ? note.text.trim() : "";
+
+  if (!magazineID || !noteAuthorID || text.length === 0) {
+    await writeNotificationEventStatus({
+      eventID: `marginNote_${noteID}`,
+      type: "margin_note_published",
+      marginNoteID: noteID,
+      magazineID,
+      recipientUserID: "",
+      status: "skipped",
+      reason: "missing_required_fields",
+    });
+    return;
+  }
+
+  const issueSnap = await db.collection("publishedIssues").doc(magazineID).get();
+  if (!issueSnap.exists) {
+    await writeNotificationEventStatus({
+      eventID: `marginNote_${noteID}`,
+      type: "margin_note_published",
+      marginNoteID: noteID,
+      magazineID,
+      recipientUserID: "",
+      status: "skipped",
+      reason: "missing_magazine",
+    });
+    return;
+  }
+
+  const issue = issueSnap.data() || {};
+  const magazineOwnerID = issue.ownerID || "";
+  if (!magazineOwnerID || magazineOwnerID === noteAuthorID) {
+    await writeNotificationEventStatus({
+      eventID: `marginNote_${noteID}`,
+      type: "margin_note_published",
+      marginNoteID: noteID,
+      magazineID,
+      recipientUserID: magazineOwnerID,
+      status: "skipped",
+      reason: magazineOwnerID === noteAuthorID ? "own_magazine" : "missing_owner",
+    });
+    return;
+  }
+
+  const ownerSnap = await db.collection("users").doc(magazineOwnerID).get();
+  const owner = ownerSnap.exists ? (ownerSnap.data() || {}) : {};
+  if (owner.marginNoteNotificationsEnabled === false) {
+    await writeNotificationEventStatus({
+      eventID: `marginNote_${noteID}`,
+      type: "margin_note_published",
+      marginNoteID: noteID,
+      magazineID,
+      recipientUserID: magazineOwnerID,
+      status: "skipped",
+      reason: "recipient_disabled",
+    });
+    return;
+  }
+
+  const eventID = `marginNote_${noteID}`;
+  const eventRef = db.collection("notificationEvents").doc(eventID);
+  const claimed = await claimNotificationEvent(eventRef, {
+    type: "margin_note_published",
+    marginNoteID: noteID,
+    magazineID,
+    recipientUserID: magazineOwnerID,
+  });
+
+  if (!claimed) {
+    logger.info("PUSH_MARGIN_NOTE_EVENT_ALREADY_HANDLED", { marginNoteID: noteID, magazineID });
+    return;
+  }
+
+  try {
+    const displayName = note.authorDisplayName || note.authorUsername || await displayNameForUser(noteAuthorID);
+    const delivery = await sendToUsers([magazineOwnerID], (languageRaw) => {
+      const copy = localizedPushCopy(languageRaw);
+      return {
+        notification: {
+          title: copy.marginNoteTitle,
+          body: copy.marginNoteBody(displayName),
+        },
+        data: {
+          type: "margin_note_published",
+          magazineID,
+          marginNoteID: noteID,
+          pageIndex: pageIndex === null ? "" : String(pageIndex),
+        },
+        android: {
+          notification: {
+            channelId: "margin_notes",
+          },
+        },
+        apns: {
+          headers: {
+            "apns-collapse-id": `marginNote_${noteID}`,
+          },
+          payload: {
+            aps: {
+              category: "MARGIN_NOTE_PUBLISHED",
+            },
+          },
+        },
+      };
+    }, "PUSH_MARGIN_NOTE_SENT", { marginNoteID: noteID, magazineID });
+
+    if (delivery.successCount > 0) {
+      await eventRef.set({
+        status: "sent",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        tokenCount: delivery.tokenCount,
+        successCount: delivery.successCount,
+        failureCount: delivery.failureCount,
+      }, { merge: true });
+      return;
+    }
+
+    const status = delivery.tokenCount === 0 ? "skipped" : "failed";
+    await eventRef.set({
+      status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      tokenCount: delivery.tokenCount,
+      successCount: delivery.successCount,
+      failureCount: delivery.failureCount,
+      failureReason: delivery.tokenCount === 0 ? "no_tokens" : "send_failed",
+    }, { merge: true });
+  } catch (error) {
+    await eventRef.set({
+      status: "failed",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      failureReason: error && error.message ? error.message : "unknown",
+    }, { merge: true });
+    logger.error("PUSH_MARGIN_NOTE_FAILED", {
+      marginNoteID: noteID,
+      magazineID,
+      error: error && error.message,
+    });
+  }
+});
+
+async function claimNotificationEvent(eventRef, data) {
+  return db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    const now = Date.now();
+
+    if (snap.exists) {
+      const current = snap.data() || {};
+      if (current.status === "sent" || current.status === "skipped") {
+        return false;
+      }
+
+      if (current.status === "processing") {
+        const updatedAt = current.updatedAt && current.updatedAt.toMillis ? current.updatedAt.toMillis() : 0;
+        const processingIsFresh = updatedAt > now - (10 * 60 * 1000);
+        if (processingIsFresh) {
+          return false;
+        }
+      }
+    }
+
+    transaction.set(eventRef, {
+      ...data,
+      status: "processing",
+      createdAt: snap.exists ? snap.data().createdAt || admin.firestore.FieldValue.serverTimestamp() : admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    return true;
+  });
+}
+
+async function writeNotificationEventStatus({ eventID, type, marginNoteID, magazineID, recipientUserID, status, reason }) {
+  const eventRef = db.collection("notificationEvents").doc(eventID);
+  await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (snap.exists) {
+      const currentStatus = (snap.data() || {}).status;
+      if (currentStatus === "sent" || currentStatus === "skipped") {
+        return;
+      }
+    }
+
+    transaction.set(eventRef, {
+      type,
+      marginNoteID,
+      magazineID,
+      recipientUserID,
+      status,
+      reason,
+      createdAt: snap.exists ? snap.data().createdAt || admin.firestore.FieldValue.serverTimestamp() : admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+}
+
 async function maybeSendGoldenHeart({ groupID, groupName, memberIDs, month, year }) {
   if (!month || !year || memberIDs.length === 0) {
     return;
@@ -136,7 +342,11 @@ async function sendToUsers(userIDs, payloadForLanguage, logLabel, logData) {
   const tokenRecords = await tokensForUsers(userIDs);
   if (tokenRecords.length === 0) {
     logger.info(logLabel, { ...logData, tokenCount: 0 });
-    return;
+    return {
+      tokenCount: 0,
+      successCount: 0,
+      failureCount: 0,
+    };
   }
 
   let successCount = 0;
@@ -149,13 +359,19 @@ async function sendToUsers(userIDs, payloadForLanguage, logLabel, logData) {
 
   const messages = tokenRecords.map(({ token, userID, languageRaw }) => {
     const payload = payloadForLanguage(languageRaw);
+    const baseApns = payload.apns || {};
+    const baseAps = baseApns.payload && baseApns.payload.aps ? baseApns.payload.aps : {};
     return {
       token,
       notification: payload.notification,
       data: payload.data,
+      android: payload.android,
       apns: {
+        ...baseApns,
         payload: {
+          ...(baseApns.payload || {}),
           aps: {
+            ...baseAps,
             sound: "default",
             badge: badgeCounts.get(userID) || 0,
           },
@@ -170,11 +386,20 @@ async function sendToUsers(userIDs, payloadForLanguage, logLabel, logData) {
 
   response.responses.forEach((result, index) => {
     if (!result.success) {
+      const tokenRecord = tokenRecords[index];
       logger.warn("PUSH_SEND_TOKEN_ERROR", {
         ...logData,
-        userID: tokenRecords[index].userID,
+        userID: tokenRecord.userID,
         error: result.error && result.error.message,
       });
+      if (isInvalidTokenError(result.error)) {
+        removeInvalidToken(tokenRecord).catch((error) => {
+          logger.warn("PUSH_REMOVE_INVALID_TOKEN_ERROR", {
+            userID: tokenRecord.userID,
+            error: error && error.message,
+          });
+        });
+      }
     }
   });
 
@@ -184,6 +409,31 @@ async function sendToUsers(userIDs, payloadForLanguage, logLabel, logData) {
     successCount,
     failureCount,
   });
+
+  return {
+    tokenCount: tokenRecords.length,
+    successCount,
+    failureCount,
+  };
+}
+
+function isInvalidTokenError(error) {
+  const code = error && error.code;
+  return code === "messaging/registration-token-not-registered"
+    || code === "messaging/invalid-registration-token"
+    || code === "messaging/invalid-argument";
+}
+
+async function removeInvalidToken({ userID, token }) {
+  if (!userID || !token) {
+    return;
+  }
+
+  await db.collection("users")
+    .doc(userID)
+    .collection("fcmTokens")
+    .doc(token)
+    .delete();
 }
 
 async function unreadGroupIssueCount(uid) {
@@ -242,6 +492,8 @@ function localizedPushCopy(languageRaw) {
         newIssueBody: (name, month, groupName) => `${name} hat die ${month}-Ausgabe in ${groupName} veröffentlicht.`,
         goldenHeartTitle: "Goldenes Herz freigeschaltet",
         goldenHeartBody: (groupName) => `Alle in ${groupName} haben diesen Monat veröffentlicht.`,
+        marginNoteTitle: "Neue Randnotiz",
+        marginNoteBody: (name) => `${name} hat eine Notiz in deinem Magazin hinterlassen.`,
       };
     case "Italiano":
       return {
@@ -249,6 +501,8 @@ function localizedPushCopy(languageRaw) {
         newIssueBody: (name, month, groupName) => `${name} ha pubblicato il suo giornale di ${month} in ${groupName}.`,
         goldenHeartTitle: "Cuore d’oro sbloccato",
         goldenHeartBody: (groupName) => `Tutti in ${groupName} hanno pubblicato questo mese.`,
+        marginNoteTitle: "Nuova nota a margine",
+        marginNoteBody: (name) => `${name} ha lasciato una nota nel tuo magazine.`,
       };
     case "Español":
       return {
@@ -256,6 +510,8 @@ function localizedPushCopy(languageRaw) {
         newIssueBody: (name, month, groupName) => `${name} publicó su revista de ${month} en ${groupName}.`,
         goldenHeartTitle: "Corazón dorado desbloqueado",
         goldenHeartBody: (groupName) => `Todos en ${groupName} publicaron este mes.`,
+        marginNoteTitle: "Nueva nota al margen",
+        marginNoteBody: (name) => `${name} ha dejado una nota en tu revista.`,
       };
     case "Français":
       return {
@@ -263,6 +519,8 @@ function localizedPushCopy(languageRaw) {
         newIssueBody: (name, month, groupName) => `${name} a publié son magazine de ${month} dans ${groupName}.`,
         goldenHeartTitle: "Coeur doré débloqué",
         goldenHeartBody: (groupName) => `Tout le monde dans ${groupName} a publié ce mois-ci.`,
+        marginNoteTitle: "Nouvelle note en marge",
+        marginNoteBody: (name) => `${name} a laissé une note dans ton magazine.`,
       };
     default:
       return {
@@ -270,6 +528,8 @@ function localizedPushCopy(languageRaw) {
         newIssueBody: (name, month, groupName) => `${name} published their ${month} issue in ${groupName}.`,
         goldenHeartTitle: "Golden heart unlocked",
         goldenHeartBody: (groupName) => `Everyone in ${groupName} published this month.`,
+        marginNoteTitle: "New margin note",
+        marginNoteBody: (name) => `${name} left a note in your magazine.`,
       };
   }
 }

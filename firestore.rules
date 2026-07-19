@@ -181,6 +181,10 @@ service cloud.firestore {
         && marginNoteIdMatches(noteId, resource.data);
     }
 
+    match /notificationEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
