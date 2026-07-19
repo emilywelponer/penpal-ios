@@ -201,7 +201,9 @@ final class FirestoreManager: ObservableObject {
                     patternColorHex: data["patternColorHex"] as? String,
                     profilePattern: data["profilePattern"] as? String,
                     nameFont: data["nameFont"] as? String,
-                    nameColorHex: data["nameColorHex"] as? String
+                    nameColorHex: data["nameColorHex"] as? String,
+                    founderSupporter: data["founderSupporter"] as? Bool ?? false,
+                    founderSupporterTier: data["founderSupporterTier"] as? String
                 )
             )
         }

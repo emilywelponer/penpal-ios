@@ -27,6 +27,8 @@ struct PenpalProfile: Identifiable, Hashable {
     var profilePattern: String?
     var nameFont: String?
     var nameColorHex: String?
+    var founderSupporter: Bool = false
+    var founderSupporterTier: String?
 }
 
 struct SavedMagazineIssue: Identifiable {
@@ -1459,6 +1461,7 @@ struct ProfileSettingsView: View {
     @AppStorage("nameFont") private var nameFontValue: String = "serif"
     @AppStorage("nameColorHex") private var nameColorHex: String = "#000000"
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
+    @State private var isFounderSupporter = false
     
     private var firebaseUser: User? {
         Auth.auth().currentUser
@@ -1469,6 +1472,10 @@ struct ProfileSettingsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 Text(appText("Profile", languageRaw))
                     .font(.system(size: 38, weight: .light, design: .serif))
+
+                if isFounderSupporter {
+                    FounderSupporterBadge()
+                }
                 
                 NavigationLink {
                     ProfileStyleEditorView()
@@ -1501,6 +1508,9 @@ struct ProfileSettingsView: View {
                 print("BLOCKED_QUERY_NO_AUTH", "ProfileSettingsView.onAppear")
                 return
             }
+            FirestoreManager.shared.fetchCurrentUserProfile { profile in
+                isFounderSupporter = profile?.founderSupporter ?? false
+            }
         }
     }
 }
@@ -1522,6 +1532,7 @@ struct ProfileAccountSettingsSection: View {
     @State private var showConfirmPassword = false
     @State private var marginNoteNotificationsEnabled = true
     @State private var isSavingMarginNotePreference = false
+    @State private var labFounderSupporter = false
 
     private var selectedLanguage: Binding<AppLanguage> {
         Binding(
@@ -1648,6 +1659,19 @@ struct ProfileAccountSettingsSection: View {
                 )
             }
 
+            if !PenPalLabConfiguration.restrictPenPalLabToFounders || labFounderSupporter {
+                NavigationLink {
+                    PenPalLabView()
+                } label: {
+                    SettingsRow(
+                        icon: "flask",
+                        title: appText("PenPal Lab", languageRaw),
+                        subtitle: appText("Help shape the future of PenPal", languageRaw)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
             if !errorMessage.isEmpty {
                 Text(errorMessage)
                     .font(.caption)
@@ -1752,6 +1776,9 @@ struct ProfileAccountSettingsSection: View {
     private func loadMarginNoteNotificationPreference() {
         FirestoreManager.shared.fetchMarginNoteNotificationsEnabled { enabled in
             marginNoteNotificationsEnabled = enabled
+        }
+        FirestoreManager.shared.fetchCurrentUserProfile { profile in
+            labFounderSupporter = profile?.founderSupporter ?? false
         }
     }
 
