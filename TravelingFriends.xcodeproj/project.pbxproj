@@ -43,6 +43,8 @@
 		3DA400052FF1000000AA0001 /* PenPalHeaderMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA4000A2FF1000000AA0001 /* PenPalHeaderMenu.swift */; };
 		3DA500012FF2000000AA0001 /* StoreKitProductCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA500032FF2000000AA0001 /* StoreKitProductCatalog.swift */; };
 		3DA500022FF2000000AA0001 /* EntitlementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA500042FF2000000AA0001 /* EntitlementModels.swift */; };
+		3DA500052FF2000000AA0001 /* StoreKitPurchaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA500072FF2000000AA0001 /* StoreKitPurchaseService.swift */; };
+		3DA500062FF2000000AA0001 /* MonetizationFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA500092FF2000000AA0001 /* MonetizationFoundationTests.swift */; };
 		3DB79DC72FB9F30A00D97848 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 3DB79DC62FB9F30A00D97848 /* FirebaseAnalytics */; };
 		3DB79DC92FB9F30A00D97848 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 3DB79DC82FB9F30A00D97848 /* FirebaseAuth */; };
 		3DB79DCB2FB9F30A00D97848 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3DB79DCA2FB9F30A00D97848 /* FirebaseCore */; };
@@ -116,6 +118,9 @@
 		3DA4000A2FF1000000AA0001 /* PenPalHeaderMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenPalHeaderMenu.swift; sourceTree = "<group>"; };
 		3DA500032FF2000000AA0001 /* StoreKitProductCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitProductCatalog.swift; sourceTree = "<group>"; };
 		3DA500042FF2000000AA0001 /* EntitlementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementModels.swift; sourceTree = "<group>"; };
+		3DA500072FF2000000AA0001 /* StoreKitPurchaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitPurchaseService.swift; sourceTree = "<group>"; };
+		3DA500082FF2000000AA0001 /* PenPal.storekit */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PenPal.storekit; sourceTree = "<group>"; };
+		3DA500092FF2000000AA0001 /* MonetizationFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonetizationFoundationTests.swift; sourceTree = "<group>"; };
 		3DB79D862FB794EB00D97848 /* TravelingFriends.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TravelingFriends.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DB79D952FB794EC00D97848 /* TravelingFriendsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TravelingFriendsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DB79D9F2FB794EC00D97848 /* TravelingFriendsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TravelingFriendsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -168,6 +173,7 @@
 			isa = PBXGroup;
 			children = (
 				3DB79DFE2FBA073700D97848 /* PenPal */,
+				3DA5000A2FF2000000AA0001 /* PenPalTests */,
 				3DB79E162FBA0B6D00D97848 /* Frameworks */,
 				3DB79D872FB794EB00D97848 /* Products */,
 			);
@@ -210,6 +216,8 @@
 				3DA4000A2FF1000000AA0001 /* PenPalHeaderMenu.swift */,
 				3DA500032FF2000000AA0001 /* StoreKitProductCatalog.swift */,
 				3DA500042FF2000000AA0001 /* EntitlementModels.swift */,
+				3DA500072FF2000000AA0001 /* StoreKitPurchaseService.swift */,
+				3DA500082FF2000000AA0001 /* PenPal.storekit */,
 				3D7B22652FC2EEE400A428A4 /* FriendRequestsView.swift */,
 				3D7B22772FC7466700A428A4 /* FriendsStore.swift */,
 				3D7B22632FC2EE8E00A428A4 /* SettingsView.swift */,
@@ -236,6 +244,14 @@
 				3DB79DFD2FBA073700D97848 /* UserModel.swift */,
 			);
 			path = PenPal;
+			sourceTree = "<group>";
+		};
+		3DA5000A2FF2000000AA0001 /* PenPalTests */ = {
+			isa = PBXGroup;
+			children = (
+				3DA500092FF2000000AA0001 /* MonetizationFoundationTests.swift */,
+			);
+			path = PenPalTests;
 			sourceTree = "<group>";
 		};
 		3DB79E162FBA0B6D00D97848 /* Frameworks */ = {
@@ -427,6 +443,7 @@
 				3DA400052FF1000000AA0001 /* PenPalHeaderMenu.swift in Sources */,
 				3DA500012FF2000000AA0001 /* StoreKitProductCatalog.swift in Sources */,
 				3DA500022FF2000000AA0001 /* EntitlementModels.swift in Sources */,
+				3DA500052FF2000000AA0001 /* StoreKitPurchaseService.swift in Sources */,
 				3D90000B2FE31A0000AA0001 /* AppLocalization.swift in Sources */,
 				3D9000012FE31A0000AA0001 /* MagazineTemplateLocalization.swift in Sources */,
 				3D9000022FE31A0000AA0001 /* MagazineTemplateLocalizationGerman.swift in Sources */,
@@ -443,6 +460,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3DA500062FF2000000AA0001 /* MonetizationFoundationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
