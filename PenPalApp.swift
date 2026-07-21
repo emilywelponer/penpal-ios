@@ -78,7 +78,17 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         )
         UNUserNotificationCenter.current().setNotificationCategories([marginNoteCategory])
         PushNotificationManager.shared.requestRemotePermissionAndRegister()
+        Task { @MainActor in
+            StoreKitPurchaseService.shared.startTransactionListener()
+            await StoreKitPurchaseService.shared.refreshCurrentEntitlements()
+        }
         return true
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        Task { @MainActor in
+            await StoreKitPurchaseService.shared.refreshCurrentEntitlements()
+        }
     }
 
     func application(

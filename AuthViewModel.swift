@@ -22,6 +22,9 @@ final class AuthViewModel: ObservableObject {
             if user == nil {
                 print("AUTH_STATE_CHANGED_RECENT_ACTION", AuthEventTracker.recentActionSummary())
                 print("AUTH_FORCE_LOGOUT", "AuthViewModel auth state nil")
+                Task { @MainActor in
+                    StoreKitPurchaseService.shared.resetForLogout()
+                }
                 UserDefaults.standard.set(false, forKey: "isLoggedIn")
                 UserDefaults.standard.removeObject(forKey: "currentUserID")
                 FirestoreManager.shared.removeAllListeners(reason: "AuthViewModel auth state nil")
@@ -92,6 +95,9 @@ final class AuthViewModel: ObservableObject {
         do {
             AuthEventTracker.record("SIGN_OUT_CALLED AuthViewModel")
             PushNotificationManager.shared.deleteCurrentTokenForLogout()
+            Task { @MainActor in
+                StoreKitPurchaseService.shared.resetForLogout()
+            }
             UserDefaults.standard.set(false, forKey: "isLoggedIn")
             UserDefaults.standard.removeObject(forKey: "currentUserID")
             FirestoreManager.shared.removeAllListeners(reason: "AuthViewModel signOut")

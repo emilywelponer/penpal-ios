@@ -803,6 +803,7 @@ struct ContentView: View {
         AuthEventTracker.record("AUTH_FORCE_LOGOUT \(reason)")
         print("AUTH_FORCE_LOGOUT", reason)
         PushNotificationManager.shared.deleteCurrentTokenForLogout()
+        StoreKitPurchaseService.shared.resetForLogout()
         currentUserID = ""
         UserDefaults.standard.set(false, forKey: "isLoggedIn")
         UserDefaults.standard.removeObject(forKey: "currentUserID")
