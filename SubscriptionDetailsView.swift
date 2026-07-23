@@ -7,14 +7,12 @@ import FirebaseAuth
 
 enum PenPalPlan: String {
     case free
-    case pro
     case premium
     case founder
 
     var titleKey: String {
         switch self {
         case .free: return "Free"
-        case .pro: return "Pro"
         case .premium: return "Premium"
         case .founder: return "Founder Supporter"
         }
@@ -23,7 +21,6 @@ enum PenPalPlan: String {
     var symbol: String {
         switch self {
         case .free: return "circle"
-        case .pro: return "sparkles"
         case .premium: return "crown.fill"
         case .founder: return "flask.fill"
         }
@@ -346,8 +343,6 @@ private extension PenPalPlan {
         switch self {
         case .free:
             return "Create magazines, save drafts and share with your groups."
-        case .pro:
-            return "Extra creative tools and more room to shape each issue."
         case .premium:
             return "The fullest PenPal experience for frequent magazine makers."
         case .founder:

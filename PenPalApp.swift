@@ -68,6 +68,9 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
     ) -> Bool {
         FirebaseApp.configure()
+        guard !ProcessInfo.processInfo.isRunningXCTest else {
+            return true
+        }
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
         let marginNoteCategory = UNNotificationCategory(
@@ -86,6 +89,9 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
+        guard !ProcessInfo.processInfo.isRunningXCTest else {
+            return
+        }
         Task { @MainActor in
             await StoreKitPurchaseService.shared.refreshCurrentEntitlements()
         }
@@ -129,6 +135,13 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             }
         }
         completionHandler()
+    }
+}
+
+private extension ProcessInfo {
+    var isRunningXCTest: Bool {
+        environment["XCTestConfigurationFilePath"] != nil
+            || arguments.contains { $0.contains("xctest") }
     }
 }
 

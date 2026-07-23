@@ -83,7 +83,7 @@ struct PenPalHeaderMenu: View {
     @ViewBuilder
     private var headerBadge: some View {
         switch plan {
-        case .pro, .premium:
+        case .premium:
             NavigationLink {
                 SubscriptionDetailsView(plan: plan)
             } label: {
