@@ -88,7 +88,7 @@ Do not deploy until the Firebase project is confirmed.
 | Premium annual product ID | Same as above | App Store Connect subscription | `com.emily.penpal.premium.annual` | No | Product unavailable or rejected by backend. |
 | Subscription group | Documentation/paywall copy | App Store Connect subscription group | `PenPal Premium` | No | StoreKit subscription switching/status may behave incorrectly. |
 | Firebase project | CLI `--project`, `GoogleService-Info.plist` | Firebase Console | Project ID string | No | App calls one project while Functions/rules deploy to another. |
-| Functions region | Function defaults | Firebase Functions deployment | `us-central1` unless changed in code | No | Notification URL points to wrong endpoint. |
+| Functions region | `functions/index.js` `FUNCTIONS_REGION`, `setGlobalOptions` | Firebase Functions deployment and notification URL | `us-central1` | No | Callable client and notification URL point to a different region than deployed Functions. |
 | Sandbox notification URL | Derived deployed HTTPS function URL | App Store Connect Sandbox Server Notifications | `https://us-central1-<project>.cloudfunctions.net/appStoreServerNotificationsV2` | No | Apple notifications never reach backend. |
 | Production notification URL | Same | App Store Connect Production Server Notifications | HTTPS function URL for production Firebase project | No | Production lifecycle events not processed. |
 | Apple issuer ID | Secret `APPLE_ISSUER_ID` | App Store Connect API key page | UUID | Yes | App Store Server API reconciliation fails. |

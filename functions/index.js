@@ -1,5 +1,6 @@
 const { onDocumentCreated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { setGlobalOptions } = require("firebase-functions/v2/options");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
@@ -18,6 +19,9 @@ const commerceEntitlements = require("./commerceEntitlements");
 admin.initializeApp();
 
 const db = admin.firestore();
+const FUNCTIONS_REGION = "us-central1";
+
+setGlobalOptions({ region: FUNCTIONS_REGION });
 
 const BUNDLE_ID = "com.emily.penpal";
 const FOUNDER_PRODUCT_ID = "com.emily.penpal.founder";
