@@ -13,6 +13,7 @@ const {
   ProductType,
   SignedDataVerifier,
 } = require("@apple/app-store-server-library");
+const commerceEntitlements = require("./commerceEntitlements");
 
 admin.initializeApp();
 
@@ -38,6 +39,7 @@ const APPLE_SECRETS = [
   defineSecret("APPLE_APP_APPLE_ID"),
   defineSecret("APPLE_ROOT_CERTIFICATES_BASE64_JSON"),
   defineSecret("APPLE_ENVIRONMENT"),
+  defineSecret("APPLE_ALLOWED_ENVIRONMENTS"),
 ];
 
 exports.getOrCreateAppAccountToken = onCall(async (request) => {
@@ -112,16 +114,20 @@ exports.processAppStoreTransaction = onCall({ secrets: APPLE_SECRETS }, async (r
 
 exports.reconcileAppStoreEntitlements = onCall({ secrets: APPLE_SECRETS }, async (request) => {
   const uid = requireAuth(request);
-  const entitlementSnap = await privateEntitlementRef(uid).get();
-  if (!entitlementSnap.exists) {
-    return { ok: true, reconciledTransactions: 0 };
-  }
+  const originalBindings = await db.collection("appStoreOriginalTransactions")
+    .where("uid", "==", uid)
+    .get();
 
-  const entitlement = entitlementSnap.data() || {};
-  const originalIDs = [
+  const indexedOriginalIDs = originalBindings.docs
+    .map((doc) => doc.data().originalTransactionID)
+    .filter((value) => typeof value === "string" && value.length > 0);
+  const entitlementSnap = await privateEntitlementRef(uid).get();
+  const entitlement = entitlementSnap.exists ? entitlementSnap.data() || {} : {};
+  const fallbackOriginalIDs = [
     entitlement.premiumOriginalTransactionID,
     entitlement.founderOriginalTransactionID,
   ].filter((value) => typeof value === "string" && value.length > 0);
+  const originalIDs = [...indexedOriginalIDs, ...fallbackOriginalIDs];
 
   let reconciledTransactions = 0;
   for (const originalTransactionID of new Set(originalIDs)) {
@@ -174,7 +180,8 @@ exports.appStoreServerNotificationsV2 = onRequest({ secrets: APPLE_SECRETS }, as
     const transactionVerification = await verifySignedTransaction(signedTransactionInfo);
     const decodedTransaction = transactionVerification.decodedTransaction;
     const originalTransactionID = normalizedOriginalTransactionID(decodedTransaction);
-    const bindingSnap = await db.collection("appStoreOriginalTransactions").doc(originalTransactionID).get();
+    const originalDocID = commerceDocID(transactionVerification.environmentName, originalTransactionID);
+    const bindingSnap = await db.collection("appStoreOriginalTransactions").doc(originalDocID).get();
     const uid = bindingSnap.exists ? bindingSnap.data().uid : await uidForAppAccountToken(decodedTransaction.appAccountToken);
 
     if (!uid) {
@@ -187,15 +194,20 @@ exports.appStoreServerNotificationsV2 = onRequest({ secrets: APPLE_SECRETS }, as
       return;
     }
 
+    const decodedRenewalInfo = typeof signedRenewalInfo === "string"
+      ? await verifySignedRenewalInfo(signedRenewalInfo, transactionVerification.environment)
+      : null;
+
     await processVerifiedTransactionForUID({
       uid,
       decodedTransaction,
+      decodedRenewalInfo,
       signedTransactionInfo,
       signedRenewalInfo,
       notificationType: notification.notificationType || "UNKNOWN",
       notificationSubtype: notification.subtype || null,
       environment: transactionVerification.environmentName,
-      allowCreateBinding: false,
+      allowCreateBinding: true,
     });
 
     await eventRef.set({
@@ -742,12 +754,74 @@ function privateEntitlementRef(uid) {
 }
 
 function configuredAppleEnvironment() {
-  const raw = (process.env.APPLE_ENVIRONMENT || "Production").toLowerCase();
-  return raw === "sandbox" ? Environment.SANDBOX : Environment.PRODUCTION;
+  const raw = process.env.APPLE_ENVIRONMENT;
+  if (!raw) {
+    throw new Error("APPLE_ENVIRONMENT is required.");
+  }
+  const normalized = raw.toLowerCase();
+  if (normalized === "sandbox") {
+    return Environment.SANDBOX;
+  }
+  if (normalized === "production") {
+    return Environment.PRODUCTION;
+  }
+  throw new Error("APPLE_ENVIRONMENT must be Sandbox or Production.");
+}
+
+function configuredAppleEnvironments() {
+  const raw = process.env.APPLE_ALLOWED_ENVIRONMENTS || process.env.APPLE_ENVIRONMENT || "Production";
+  const environments = raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => {
+      if (entry === "sandbox") {
+        return Environment.SANDBOX;
+      }
+      if (entry === "production") {
+        return Environment.PRODUCTION;
+      }
+      throw new Error("APPLE_ALLOWED_ENVIRONMENTS may only contain Sandbox and Production.");
+    });
+
+  return environments.length > 0 ? environments : [Environment.PRODUCTION];
 }
 
 function configuredAppleEnvironmentName(environment) {
   return environment === Environment.SANDBOX ? "Sandbox" : "Production";
+}
+
+function validateAppleCommerceConfig({ requiresServerAPI = false } = {}) {
+  if (BUNDLE_ID !== "com.emily.penpal") {
+    throw new Error("Commerce bundle identifier is misconfigured.");
+  }
+
+  for (const productID of [FOUNDER_PRODUCT_ID, PREMIUM_MONTHLY_PRODUCT_ID, PREMIUM_ANNUAL_PRODUCT_ID]) {
+    if (!ALLOWED_PRODUCT_IDS.has(productID)) {
+      throw new Error("Commerce product identifiers are misconfigured.");
+    }
+  }
+
+  const allowedEnvironments = configuredAppleEnvironments();
+  const primaryEnvironment = configuredAppleEnvironment();
+  if (!allowedEnvironments.includes(primaryEnvironment)) {
+    throw new Error("APPLE_ENVIRONMENT must be included in APPLE_ALLOWED_ENVIRONMENTS.");
+  }
+
+  appleRootCertificates();
+
+  if (allowedEnvironments.includes(Environment.PRODUCTION)) {
+    appAppleIDForEnvironment(Environment.PRODUCTION);
+  }
+
+  if (requiresServerAPI) {
+    const issuerID = process.env.APPLE_ISSUER_ID;
+    const keyID = process.env.APPLE_KEY_ID;
+    const privateKey = process.env.APPLE_PRIVATE_KEY;
+    if (!issuerID || !keyID || !privateKey) {
+      throw new Error("Apple App Store Server API credentials are missing.");
+    }
+  }
 }
 
 function appAppleIDForEnvironment(environment) {
@@ -776,6 +850,7 @@ function appleRootCertificates() {
 }
 
 function appleVerifier(environment = configuredAppleEnvironment()) {
+  validateAppleCommerceConfig();
   return new SignedDataVerifier(
     appleRootCertificates(),
     true,
@@ -786,6 +861,7 @@ function appleVerifier(environment = configuredAppleEnvironment()) {
 }
 
 function appStoreClient(environment = configuredAppleEnvironment()) {
+  validateAppleCommerceConfig({ requiresServerAPI: true });
   const issuerID = process.env.APPLE_ISSUER_ID;
   const keyID = process.env.APPLE_KEY_ID;
   const privateKey = process.env.APPLE_PRIVATE_KEY;
@@ -797,59 +873,49 @@ function appStoreClient(environment = configuredAppleEnvironment()) {
 }
 
 async function verifySignedTransaction(signedTransactionInfo) {
-  const preferredEnvironment = configuredAppleEnvironment();
-  const fallbackEnvironment = preferredEnvironment === Environment.PRODUCTION
-    ? Environment.SANDBOX
-    : Environment.PRODUCTION;
+  const environments = configuredAppleEnvironments();
+  let lastError = null;
 
-  try {
-    const decodedTransaction = await appleVerifier(preferredEnvironment).verifyAndDecodeTransaction(signedTransactionInfo);
-    validateDecodedTransaction(decodedTransaction);
-    return {
-      decodedTransaction,
-      environment: preferredEnvironment,
-      environmentName: configuredAppleEnvironmentName(preferredEnvironment),
-    };
-  } catch (primaryError) {
+  for (const environment of environments) {
     try {
-      const decodedTransaction = await appleVerifier(fallbackEnvironment).verifyAndDecodeTransaction(signedTransactionInfo);
+      const decodedTransaction = await appleVerifier(environment).verifyAndDecodeTransaction(signedTransactionInfo);
       validateDecodedTransaction(decodedTransaction);
       return {
         decodedTransaction,
-        environment: fallbackEnvironment,
-        environmentName: configuredAppleEnvironmentName(fallbackEnvironment),
+        environment,
+        environmentName: configuredAppleEnvironmentName(environment),
       };
-    } catch (fallbackError) {
-      throw primaryError;
+    } catch (error) {
+      lastError = error;
     }
   }
+
+  throw lastError || new HttpsError("failed-precondition", "Unable to verify App Store transaction.");
 }
 
 async function verifySignedNotification(signedPayload) {
-  const preferredEnvironment = configuredAppleEnvironment();
-  const fallbackEnvironment = preferredEnvironment === Environment.PRODUCTION
-    ? Environment.SANDBOX
-    : Environment.PRODUCTION;
+  const environments = configuredAppleEnvironments();
+  let lastError = null;
 
-  try {
-    const decodedNotification = await appleVerifier(preferredEnvironment).verifyAndDecodeNotification(signedPayload);
-    return {
-      decodedNotification,
-      environment: preferredEnvironment,
-      environmentName: configuredAppleEnvironmentName(preferredEnvironment),
-    };
-  } catch (primaryError) {
+  for (const environment of environments) {
     try {
-      const decodedNotification = await appleVerifier(fallbackEnvironment).verifyAndDecodeNotification(signedPayload);
+      const decodedNotification = await appleVerifier(environment).verifyAndDecodeNotification(signedPayload);
       return {
         decodedNotification,
-        environment: fallbackEnvironment,
-        environmentName: configuredAppleEnvironmentName(fallbackEnvironment),
+        environment,
+        environmentName: configuredAppleEnvironmentName(environment),
       };
-    } catch (fallbackError) {
-      throw primaryError;
+    } catch (error) {
+      lastError = error;
     }
   }
+
+  throw lastError || new HttpsError("failed-precondition", "Unable to verify App Store notification.");
+}
+
+async function verifySignedRenewalInfo(signedRenewalInfo, environment) {
+  const decodedRenewalInfo = await appleVerifier(environment).verifyAndDecodeRenewalInfo(signedRenewalInfo);
+  return decodedRenewalInfo || null;
 }
 
 function validateDecodedTransaction(decodedTransaction) {
@@ -874,6 +940,7 @@ function validateDecodedTransaction(decodedTransaction) {
 async function processVerifiedTransactionForUID({
   uid,
   decodedTransaction,
+  decodedRenewalInfo = null,
   signedTransactionInfo,
   signedRenewalInfo,
   notificationType,
@@ -884,6 +951,8 @@ async function processVerifiedTransactionForUID({
   const productID = normalizedProductID(decodedTransaction);
   const transactionID = normalizedTransactionID(decodedTransaction);
   const originalTransactionID = normalizedOriginalTransactionID(decodedTransaction);
+  const originalDocID = commerceDocID(environment, originalTransactionID);
+  const transactionDocID = commerceDocID(environment, transactionID);
   const appAccountToken = decodedTransaction.appAccountToken;
   if (!appAccountToken) {
     throw new HttpsError("failed-precondition", "Transaction is missing appAccountToken.");
@@ -898,7 +967,7 @@ async function processVerifiedTransactionForUID({
       throw new HttpsError("permission-denied", "Transaction account token does not belong to this PenPal account.");
     }
 
-    const originalRef = db.collection("appStoreOriginalTransactions").doc(originalTransactionID);
+    const originalRef = db.collection("appStoreOriginalTransactions").doc(originalDocID);
     const originalSnap = await transaction.get(originalRef);
     if (originalSnap.exists && originalSnap.data().uid !== uid) {
       throw new HttpsError("already-exists", "This Apple purchase is already linked to another PenPal account.");
@@ -908,16 +977,25 @@ async function processVerifiedTransactionForUID({
       throw new HttpsError("failed-precondition", "Transaction binding does not exist.");
     }
 
-    const transactionRef = db.collection("appStoreTransactions").doc(transactionID);
+    const transactionRef = db.collection("appStoreTransactions").doc(transactionDocID);
     const transactionSnap = await transaction.get(transactionRef);
     if (transactionSnap.exists && transactionSnap.data().uid !== uid) {
       throw new HttpsError("already-exists", "This Apple transaction is already linked to another PenPal account.");
     }
 
-    const nextEntitlement = deriveEntitlementUpdate(entitlement, decodedTransaction, environment);
+    const nextEntitlement = commerceEntitlements.deriveEntitlementUpdate({
+      current: entitlement,
+      decodedTransaction,
+      decodedRenewalInfo,
+      notificationType,
+      environment,
+      serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
+      timestampFromMillis: appleMillisToTimestamp,
+    });
 
     transaction.set(originalRef, {
       uid,
+      environmentOriginalTransactionID: originalDocID,
       originalTransactionID,
       productKind: PREMIUM_PRODUCT_IDS.has(productID) ? "premium" : "founderSupporter",
       appAccountToken,
@@ -930,6 +1008,7 @@ async function processVerifiedTransactionForUID({
 
     transaction.set(transactionRef, {
       uid,
+      environmentTransactionID: transactionDocID,
       transactionID,
       originalTransactionID,
       productID,
@@ -949,51 +1028,6 @@ async function processVerifiedTransactionForUID({
 
     transaction.set(entitlementRef, nextEntitlement, { merge: true });
   });
-}
-
-function deriveEntitlementUpdate(current, decodedTransaction, environment) {
-  const now = admin.firestore.FieldValue.serverTimestamp();
-  const productID = normalizedProductID(decodedTransaction);
-  const transactionID = normalizedTransactionID(decodedTransaction);
-  const originalTransactionID = normalizedOriginalTransactionID(decodedTransaction);
-  const update = {
-    schemaVersion: 1,
-    appAccountToken: current.appAccountToken,
-    environment,
-    lastVerifiedAt: now,
-    updatedAt: now,
-  };
-
-  if (productID === FOUNDER_PRODUCT_ID) {
-    const isRevoked = !!decodedTransaction.revocationDate;
-    update.isFounderSupporter = !isRevoked;
-    update.founderOriginalTransactionID = originalTransactionID;
-    update.founderLatestTransactionID = transactionID;
-    update.founderPurchasedAt = appleMillisToTimestamp(decodedTransaction.purchaseDate);
-    update.founderRevokedAt = appleMillisToTimestamp(decodedTransaction.revocationDate);
-    update.membershipTier = current.membershipTier || "free";
-    update.premiumStatus = current.premiumStatus || "none";
-    update.premiumInGracePeriod = current.premiumInGracePeriod || false;
-    update.premiumInBillingRetry = current.premiumInBillingRetry || false;
-    return update;
-  }
-
-  const expiresDate = appleMillisToDate(decodedTransaction.expiresDate);
-  const revoked = !!decodedTransaction.revocationDate;
-  const activeByDate = expiresDate ? expiresDate.getTime() > Date.now() : false;
-  const premiumStatus = revoked ? "revoked" : (activeByDate ? "active" : "expired");
-
-  update.membershipTier = premiumStatus === "active" ? "premium" : "free";
-  update.premiumProductID = productID;
-  update.premiumOriginalTransactionID = originalTransactionID;
-  update.premiumLatestTransactionID = transactionID;
-  update.premiumExpirationDate = appleMillisToTimestamp(decodedTransaction.expiresDate);
-  update.premiumStatus = premiumStatus;
-  update.premiumWillRenew = current.premiumWillRenew || null;
-  update.premiumInGracePeriod = false;
-  update.premiumInBillingRetry = false;
-  update.isFounderSupporter = current.isFounderSupporter || false;
-  return update;
 }
 
 async function reconcileOriginalTransactionForUID(uid, originalTransactionID) {
@@ -1081,6 +1115,11 @@ function normalizedTransactionID(decodedTransaction) {
 function normalizedOriginalTransactionID(decodedTransaction) {
   const raw = decodedTransaction.originalTransactionId || decodedTransaction.originalTransactionID || decodedTransaction.originalID;
   return raw == null ? "" : String(raw);
+}
+
+function commerceDocID(environment, rawID) {
+  const cleanEnvironment = environment === "Sandbox" ? "Sandbox" : "Production";
+  return `${cleanEnvironment}_${String(rawID)}`;
 }
 
 function appleMillisToDate(value) {

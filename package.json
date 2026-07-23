@@ -1,0 +1,13 @@
+{
+  "name": "penpal-root-tests",
+  "private": true,
+  "scripts": {
+    "test:functions": "mocha \"tests/functions/**/*.test.js\"",
+    "test:rules": "mocha \"tests/firestore/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.14.1",
+    "mocha": "^10.8.2"
+  }
+}
