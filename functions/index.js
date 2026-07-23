@@ -1,10 +1,217 @@
 const { onDocumentCreated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
+const crypto = require("crypto");
+const {
+  AppStoreServerAPIClient,
+  Environment,
+  GetTransactionHistoryVersion,
+  InAppOwnershipType,
+  Order,
+  ProductType,
+  SignedDataVerifier,
+} = require("@apple/app-store-server-library");
 
 admin.initializeApp();
 
 const db = admin.firestore();
+
+const BUNDLE_ID = "com.emily.penpal";
+const FOUNDER_PRODUCT_ID = "com.emily.penpal.founder";
+const PREMIUM_MONTHLY_PRODUCT_ID = "com.emily.penpal.premium.monthly";
+const PREMIUM_ANNUAL_PRODUCT_ID = "com.emily.penpal.premium.annual";
+const ALLOWED_PRODUCT_IDS = new Set([
+  FOUNDER_PRODUCT_ID,
+  PREMIUM_MONTHLY_PRODUCT_ID,
+  PREMIUM_ANNUAL_PRODUCT_ID,
+]);
+const PREMIUM_PRODUCT_IDS = new Set([
+  PREMIUM_MONTHLY_PRODUCT_ID,
+  PREMIUM_ANNUAL_PRODUCT_ID,
+]);
+const APPLE_SECRETS = [
+  defineSecret("APPLE_ISSUER_ID"),
+  defineSecret("APPLE_KEY_ID"),
+  defineSecret("APPLE_PRIVATE_KEY"),
+  defineSecret("APPLE_APP_APPLE_ID"),
+  defineSecret("APPLE_ROOT_CERTIFICATES_BASE64_JSON"),
+  defineSecret("APPLE_ENVIRONMENT"),
+];
+
+exports.getOrCreateAppAccountToken = onCall(async (request) => {
+  const uid = requireAuth(request);
+  const entitlementRef = privateEntitlementRef(uid);
+  const tokenRefRoot = db.collection("appAccountTokens");
+
+  const appAccountToken = await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(entitlementRef);
+    const existingToken = snap.exists ? snap.data().appAccountToken : null;
+
+    if (typeof existingToken === "string" && existingToken.length > 0) {
+      return existingToken;
+    }
+
+    const token = crypto.randomUUID();
+    transaction.set(entitlementRef, {
+      schemaVersion: 1,
+      membershipTier: "free",
+      isFounderSupporter: false,
+      appAccountToken: token,
+      premiumProductID: null,
+      premiumOriginalTransactionID: null,
+      premiumLatestTransactionID: null,
+      premiumExpirationDate: null,
+      premiumWillRenew: null,
+      premiumStatus: "none",
+      premiumInGracePeriod: false,
+      premiumInBillingRetry: false,
+      founderOriginalTransactionID: null,
+      founderLatestTransactionID: null,
+      founderPurchasedAt: null,
+      environment: null,
+      lastVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    transaction.set(tokenRefRoot.doc(token), {
+      uid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return token;
+  });
+
+  return { appAccountToken };
+});
+
+exports.processAppStoreTransaction = onCall({ secrets: APPLE_SECRETS }, async (request) => {
+  const uid = requireAuth(request);
+  const signedTransactionInfo = request.data && request.data.signedTransactionInfo;
+
+  if (typeof signedTransactionInfo !== "string" || signedTransactionInfo.length < 20) {
+    throw new HttpsError("invalid-argument", "Missing signed transaction.");
+  }
+
+  const verified = await verifySignedTransaction(signedTransactionInfo);
+  await processVerifiedTransactionForUID({
+    uid,
+    decodedTransaction: verified.decodedTransaction,
+    signedTransactionInfo,
+    signedRenewalInfo: null,
+    notificationType: "CLIENT_PURCHASE",
+    environment: verified.environmentName,
+    allowCreateBinding: true,
+  });
+
+  return {
+    ok: true,
+    productID: verified.decodedTransaction.productId || verified.decodedTransaction.productID,
+  };
+});
+
+exports.reconcileAppStoreEntitlements = onCall({ secrets: APPLE_SECRETS }, async (request) => {
+  const uid = requireAuth(request);
+  const entitlementSnap = await privateEntitlementRef(uid).get();
+  if (!entitlementSnap.exists) {
+    return { ok: true, reconciledTransactions: 0 };
+  }
+
+  const entitlement = entitlementSnap.data() || {};
+  const originalIDs = [
+    entitlement.premiumOriginalTransactionID,
+    entitlement.founderOriginalTransactionID,
+  ].filter((value) => typeof value === "string" && value.length > 0);
+
+  let reconciledTransactions = 0;
+  for (const originalTransactionID of new Set(originalIDs)) {
+    reconciledTransactions += await reconcileOriginalTransactionForUID(uid, originalTransactionID);
+  }
+
+  return { ok: true, reconciledTransactions };
+});
+
+exports.appStoreServerNotificationsV2 = onRequest({ secrets: APPLE_SECRETS }, async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).send("Method Not Allowed");
+    return;
+  }
+
+  const signedPayload = req.body && req.body.signedPayload;
+  if (typeof signedPayload !== "string" || signedPayload.length < 20) {
+    res.status(400).send("Missing signedPayload");
+    return;
+  }
+
+  try {
+    const verified = await verifySignedNotification(signedPayload);
+    const notification = verified.decodedNotification || {};
+    const notificationUUID = notification.notificationUUID;
+    if (!notificationUUID) {
+      res.status(400).send("Missing notificationUUID");
+      return;
+    }
+
+    const eventRef = db.collection("appStoreNotificationEvents").doc(notificationUUID);
+    const claimed = await claimAppStoreNotificationEvent(eventRef, notification);
+    if (!claimed) {
+      res.status(200).send("duplicate");
+      return;
+    }
+
+    const signedTransactionInfo = notification.data && notification.data.signedTransactionInfo;
+    const signedRenewalInfo = notification.data && notification.data.signedRenewalInfo;
+    if (typeof signedTransactionInfo !== "string") {
+      await eventRef.set({
+        status: "skipped",
+        reason: "missing_transaction_info",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      res.status(200).send("skipped");
+      return;
+    }
+
+    const transactionVerification = await verifySignedTransaction(signedTransactionInfo);
+    const decodedTransaction = transactionVerification.decodedTransaction;
+    const originalTransactionID = normalizedOriginalTransactionID(decodedTransaction);
+    const bindingSnap = await db.collection("appStoreOriginalTransactions").doc(originalTransactionID).get();
+    const uid = bindingSnap.exists ? bindingSnap.data().uid : await uidForAppAccountToken(decodedTransaction.appAccountToken);
+
+    if (!uid) {
+      await eventRef.set({
+        status: "failed",
+        reason: "unknown_account_binding",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      res.status(202).send("unknown account");
+      return;
+    }
+
+    await processVerifiedTransactionForUID({
+      uid,
+      decodedTransaction,
+      signedTransactionInfo,
+      signedRenewalInfo,
+      notificationType: notification.notificationType || "UNKNOWN",
+      notificationSubtype: notification.subtype || null,
+      environment: transactionVerification.environmentName,
+      allowCreateBinding: false,
+    });
+
+    await eventRef.set({
+      status: "processed",
+      uid,
+      originalTransactionID,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    res.status(200).send("ok");
+  } catch (error) {
+    logger.error("APP_STORE_NOTIFICATION_FAILED", { error: error && error.message });
+    res.status(400).send("verification failed");
+  }
+});
 
 exports.notifyPublishedIssue = onDocumentCreated("publishedIssues/{issueID}", async (event) => {
   const issue = event.data && event.data.data();
@@ -517,6 +724,379 @@ async function tokensForUsers(userIDs) {
   }));
 
   return Array.from(byToken.values());
+}
+
+function requireAuth(request) {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You need to be signed in.");
+  }
+  return uid;
+}
+
+function privateEntitlementRef(uid) {
+  return db.collection("users")
+    .doc(uid)
+    .collection("privateEntitlements")
+    .doc("current");
+}
+
+function configuredAppleEnvironment() {
+  const raw = (process.env.APPLE_ENVIRONMENT || "Production").toLowerCase();
+  return raw === "sandbox" ? Environment.SANDBOX : Environment.PRODUCTION;
+}
+
+function configuredAppleEnvironmentName(environment) {
+  return environment === Environment.SANDBOX ? "Sandbox" : "Production";
+}
+
+function appAppleIDForEnvironment(environment) {
+  if (environment === Environment.PRODUCTION) {
+    const appAppleID = Number(process.env.APPLE_APP_APPLE_ID);
+    if (!Number.isInteger(appAppleID) || appAppleID <= 0) {
+      throw new Error("APPLE_APP_APPLE_ID is required for Production verification.");
+    }
+    return appAppleID;
+  }
+  return undefined;
+}
+
+function appleRootCertificates() {
+  const raw = process.env.APPLE_ROOT_CERTIFICATES_BASE64_JSON;
+  if (!raw) {
+    throw new Error("APPLE_ROOT_CERTIFICATES_BASE64_JSON is required.");
+  }
+
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("APPLE_ROOT_CERTIFICATES_BASE64_JSON must be a non-empty JSON array.");
+  }
+
+  return parsed.map((entry) => Buffer.from(entry, "base64"));
+}
+
+function appleVerifier(environment = configuredAppleEnvironment()) {
+  return new SignedDataVerifier(
+    appleRootCertificates(),
+    true,
+    environment,
+    BUNDLE_ID,
+    appAppleIDForEnvironment(environment)
+  );
+}
+
+function appStoreClient(environment = configuredAppleEnvironment()) {
+  const issuerID = process.env.APPLE_ISSUER_ID;
+  const keyID = process.env.APPLE_KEY_ID;
+  const privateKey = process.env.APPLE_PRIVATE_KEY;
+  if (!issuerID || !keyID || !privateKey) {
+    throw new Error("Apple App Store Server API credentials are missing.");
+  }
+
+  return new AppStoreServerAPIClient(privateKey, keyID, issuerID, BUNDLE_ID, environment);
+}
+
+async function verifySignedTransaction(signedTransactionInfo) {
+  const preferredEnvironment = configuredAppleEnvironment();
+  const fallbackEnvironment = preferredEnvironment === Environment.PRODUCTION
+    ? Environment.SANDBOX
+    : Environment.PRODUCTION;
+
+  try {
+    const decodedTransaction = await appleVerifier(preferredEnvironment).verifyAndDecodeTransaction(signedTransactionInfo);
+    validateDecodedTransaction(decodedTransaction);
+    return {
+      decodedTransaction,
+      environment: preferredEnvironment,
+      environmentName: configuredAppleEnvironmentName(preferredEnvironment),
+    };
+  } catch (primaryError) {
+    try {
+      const decodedTransaction = await appleVerifier(fallbackEnvironment).verifyAndDecodeTransaction(signedTransactionInfo);
+      validateDecodedTransaction(decodedTransaction);
+      return {
+        decodedTransaction,
+        environment: fallbackEnvironment,
+        environmentName: configuredAppleEnvironmentName(fallbackEnvironment),
+      };
+    } catch (fallbackError) {
+      throw primaryError;
+    }
+  }
+}
+
+async function verifySignedNotification(signedPayload) {
+  const preferredEnvironment = configuredAppleEnvironment();
+  const fallbackEnvironment = preferredEnvironment === Environment.PRODUCTION
+    ? Environment.SANDBOX
+    : Environment.PRODUCTION;
+
+  try {
+    const decodedNotification = await appleVerifier(preferredEnvironment).verifyAndDecodeNotification(signedPayload);
+    return {
+      decodedNotification,
+      environment: preferredEnvironment,
+      environmentName: configuredAppleEnvironmentName(preferredEnvironment),
+    };
+  } catch (primaryError) {
+    try {
+      const decodedNotification = await appleVerifier(fallbackEnvironment).verifyAndDecodeNotification(signedPayload);
+      return {
+        decodedNotification,
+        environment: fallbackEnvironment,
+        environmentName: configuredAppleEnvironmentName(fallbackEnvironment),
+      };
+    } catch (fallbackError) {
+      throw primaryError;
+    }
+  }
+}
+
+function validateDecodedTransaction(decodedTransaction) {
+  const productID = normalizedProductID(decodedTransaction);
+  if (!ALLOWED_PRODUCT_IDS.has(productID)) {
+    throw new HttpsError("failed-precondition", "Unknown App Store product.");
+  }
+
+  if (decodedTransaction.bundleId && decodedTransaction.bundleId !== BUNDLE_ID) {
+    throw new HttpsError("failed-precondition", "Transaction bundle identifier does not match PenPal.");
+  }
+
+  if (!normalizedTransactionID(decodedTransaction) || !normalizedOriginalTransactionID(decodedTransaction)) {
+    throw new HttpsError("failed-precondition", "Transaction is missing required identifiers.");
+  }
+
+  if (decodedTransaction.inAppOwnershipType && decodedTransaction.inAppOwnershipType !== InAppOwnershipType.PURCHASED) {
+    throw new HttpsError("failed-precondition", "Unsupported App Store ownership type.");
+  }
+}
+
+async function processVerifiedTransactionForUID({
+  uid,
+  decodedTransaction,
+  signedTransactionInfo,
+  signedRenewalInfo,
+  notificationType,
+  notificationSubtype = null,
+  environment,
+  allowCreateBinding,
+}) {
+  const productID = normalizedProductID(decodedTransaction);
+  const transactionID = normalizedTransactionID(decodedTransaction);
+  const originalTransactionID = normalizedOriginalTransactionID(decodedTransaction);
+  const appAccountToken = decodedTransaction.appAccountToken;
+  if (!appAccountToken) {
+    throw new HttpsError("failed-precondition", "Transaction is missing appAccountToken.");
+  }
+
+  await db.runTransaction(async (transaction) => {
+    const entitlementRef = privateEntitlementRef(uid);
+    const entitlementSnap = await transaction.get(entitlementRef);
+    const entitlement = entitlementSnap.exists ? entitlementSnap.data() : {};
+
+    if (entitlement.appAccountToken !== appAccountToken) {
+      throw new HttpsError("permission-denied", "Transaction account token does not belong to this PenPal account.");
+    }
+
+    const originalRef = db.collection("appStoreOriginalTransactions").doc(originalTransactionID);
+    const originalSnap = await transaction.get(originalRef);
+    if (originalSnap.exists && originalSnap.data().uid !== uid) {
+      throw new HttpsError("already-exists", "This Apple purchase is already linked to another PenPal account.");
+    }
+
+    if (!originalSnap.exists && !allowCreateBinding) {
+      throw new HttpsError("failed-precondition", "Transaction binding does not exist.");
+    }
+
+    const transactionRef = db.collection("appStoreTransactions").doc(transactionID);
+    const transactionSnap = await transaction.get(transactionRef);
+    if (transactionSnap.exists && transactionSnap.data().uid !== uid) {
+      throw new HttpsError("already-exists", "This Apple transaction is already linked to another PenPal account.");
+    }
+
+    const nextEntitlement = deriveEntitlementUpdate(entitlement, decodedTransaction, environment);
+
+    transaction.set(originalRef, {
+      uid,
+      originalTransactionID,
+      productKind: PREMIUM_PRODUCT_IDS.has(productID) ? "premium" : "founderSupporter",
+      appAccountToken,
+      environment,
+      createdAt: originalSnap.exists
+        ? originalSnap.data().createdAt || admin.firestore.FieldValue.serverTimestamp()
+        : admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    transaction.set(transactionRef, {
+      uid,
+      transactionID,
+      originalTransactionID,
+      productID,
+      environment,
+      notificationType,
+      notificationSubtype,
+      purchaseDate: appleMillisToTimestamp(decodedTransaction.purchaseDate),
+      expiresDate: appleMillisToTimestamp(decodedTransaction.expiresDate),
+      revocationDate: appleMillisToTimestamp(decodedTransaction.revocationDate),
+      signedTransactionInfo,
+      signedRenewalInfo: signedRenewalInfo || null,
+      createdAt: transactionSnap.exists
+        ? transactionSnap.data().createdAt || admin.firestore.FieldValue.serverTimestamp()
+        : admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    transaction.set(entitlementRef, nextEntitlement, { merge: true });
+  });
+}
+
+function deriveEntitlementUpdate(current, decodedTransaction, environment) {
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const productID = normalizedProductID(decodedTransaction);
+  const transactionID = normalizedTransactionID(decodedTransaction);
+  const originalTransactionID = normalizedOriginalTransactionID(decodedTransaction);
+  const update = {
+    schemaVersion: 1,
+    appAccountToken: current.appAccountToken,
+    environment,
+    lastVerifiedAt: now,
+    updatedAt: now,
+  };
+
+  if (productID === FOUNDER_PRODUCT_ID) {
+    const isRevoked = !!decodedTransaction.revocationDate;
+    update.isFounderSupporter = !isRevoked;
+    update.founderOriginalTransactionID = originalTransactionID;
+    update.founderLatestTransactionID = transactionID;
+    update.founderPurchasedAt = appleMillisToTimestamp(decodedTransaction.purchaseDate);
+    update.founderRevokedAt = appleMillisToTimestamp(decodedTransaction.revocationDate);
+    update.membershipTier = current.membershipTier || "free";
+    update.premiumStatus = current.premiumStatus || "none";
+    update.premiumInGracePeriod = current.premiumInGracePeriod || false;
+    update.premiumInBillingRetry = current.premiumInBillingRetry || false;
+    return update;
+  }
+
+  const expiresDate = appleMillisToDate(decodedTransaction.expiresDate);
+  const revoked = !!decodedTransaction.revocationDate;
+  const activeByDate = expiresDate ? expiresDate.getTime() > Date.now() : false;
+  const premiumStatus = revoked ? "revoked" : (activeByDate ? "active" : "expired");
+
+  update.membershipTier = premiumStatus === "active" ? "premium" : "free";
+  update.premiumProductID = productID;
+  update.premiumOriginalTransactionID = originalTransactionID;
+  update.premiumLatestTransactionID = transactionID;
+  update.premiumExpirationDate = appleMillisToTimestamp(decodedTransaction.expiresDate);
+  update.premiumStatus = premiumStatus;
+  update.premiumWillRenew = current.premiumWillRenew || null;
+  update.premiumInGracePeriod = false;
+  update.premiumInBillingRetry = false;
+  update.isFounderSupporter = current.isFounderSupporter || false;
+  return update;
+}
+
+async function reconcileOriginalTransactionForUID(uid, originalTransactionID) {
+  const client = appStoreClient();
+  const request = {
+    sort: Order.ASCENDING,
+    productTypes: [ProductType.AUTO_RENEWABLE, ProductType.NON_CONSUMABLE],
+  };
+
+  let revisionToken = null;
+  let processed = 0;
+  do {
+    const response = await client.getTransactionHistory(
+      originalTransactionID,
+      revisionToken,
+      request,
+      GetTransactionHistoryVersion.V2
+    );
+
+    const signedTransactions = response.signedTransactions || [];
+    for (const signedTransactionInfo of signedTransactions) {
+      const verified = await verifySignedTransaction(signedTransactionInfo);
+      await processVerifiedTransactionForUID({
+        uid,
+        decodedTransaction: verified.decodedTransaction,
+        signedTransactionInfo,
+        signedRenewalInfo: null,
+        notificationType: "RECONCILE",
+        environment: verified.environmentName,
+        allowCreateBinding: true,
+      });
+      processed += 1;
+    }
+
+    revisionToken = response.revision || null;
+    if (!response.hasMore) {
+      break;
+    }
+  } while (revisionToken);
+
+  return processed;
+}
+
+async function claimAppStoreNotificationEvent(eventRef, notification) {
+  return db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(eventRef);
+    if (snap.exists) {
+      const status = (snap.data() || {}).status;
+      if (status === "processed" || status === "skipped") {
+        return false;
+      }
+    }
+
+    transaction.set(eventRef, {
+      notificationUUID: notification.notificationUUID || eventRef.id,
+      notificationType: notification.notificationType || "UNKNOWN",
+      subtype: notification.subtype || null,
+      status: "processing",
+      createdAt: snap.exists
+        ? snap.data().createdAt || admin.firestore.FieldValue.serverTimestamp()
+        : admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  });
+}
+
+async function uidForAppAccountToken(appAccountToken) {
+  if (!appAccountToken) {
+    return null;
+  }
+  const snap = await db.collection("appAccountTokens").doc(appAccountToken).get();
+  return snap.exists ? snap.data().uid : null;
+}
+
+function normalizedProductID(decodedTransaction) {
+  return decodedTransaction.productId || decodedTransaction.productID || "";
+}
+
+function normalizedTransactionID(decodedTransaction) {
+  const raw = decodedTransaction.transactionId || decodedTransaction.transactionID || decodedTransaction.id;
+  return raw == null ? "" : String(raw);
+}
+
+function normalizedOriginalTransactionID(decodedTransaction) {
+  const raw = decodedTransaction.originalTransactionId || decodedTransaction.originalTransactionID || decodedTransaction.originalID;
+  return raw == null ? "" : String(raw);
+}
+
+function appleMillisToDate(value) {
+  if (value == null) {
+    return null;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return null;
+  }
+  return new Date(number);
+}
+
+function appleMillisToTimestamp(value) {
+  const date = appleMillisToDate(value);
+  return date ? admin.firestore.Timestamp.fromDate(date) : null;
 }
 
 function normalizedLanguage(languageRaw) {

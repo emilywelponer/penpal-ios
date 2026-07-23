@@ -101,7 +101,7 @@ struct MonetizationFoundationTests {
 
         let outcome = StoreKitPurchaseOutcome.backendProcessingFailed(
             transaction,
-            message: StoreKitPurchaseServiceError.backendVerificationUnavailable.localizedDescription
+            message: "Backend processing failed."
         )
 
         #expect(!outcome.grantsBackendEntitlement)

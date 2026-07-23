@@ -12,14 +12,11 @@ service cloud.firestore {
 
     function isFounderSupporter() {
       return signedIn()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.founderSupporter == true;
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/privateEntitlements/current).data.isFounderSupporter == true;
     }
 
     function canAccessPenPalLab() {
-      // Development preview: all signed-in users may inspect PenPal Lab.
-      // When the app flag restrictPenPalLabToFounders becomes true, change
-      // this helper to return isFounderSupporter().
-      return signedIn();
+      return isFounderSupporter();
     }
 
     function canReadPublishedIssue(issueId) {
@@ -149,6 +146,13 @@ service cloud.firestore {
         allow read, create, update, delete: if request.auth != null
           && request.auth.uid == userId;
       }
+
+      match /privateEntitlements/{documentId} {
+        allow read: if request.auth != null
+          && request.auth.uid == userId
+          && documentId == "current";
+        allow create, update, delete: if false;
+      }
     }
 
     match /friendRequests/{requestId} {
@@ -267,6 +271,22 @@ service cloud.firestore {
     }
 
     match /notificationEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /appAccountTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    match /appStoreOriginalTransactions/{transactionId} {
+      allow read, write: if false;
+    }
+
+    match /appStoreTransactions/{transactionId} {
+      allow read, write: if false;
+    }
+
+    match /appStoreNotificationEvents/{eventId} {
       allow read, write: if false;
     }
 
