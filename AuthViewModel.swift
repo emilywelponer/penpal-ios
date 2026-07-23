@@ -33,6 +33,10 @@ final class AuthViewModel: ObservableObject {
                 FriendsStore.shared.friends.removeAll()
                 MagazineArchiveStore.shared.savedIssues.removeAll()
                 IssueDraftStore.shared.pages.removeAll()
+            } else if let user {
+                Task { @MainActor in
+                    await StoreKitPurchaseService.shared.prepareForSignedInPenPalAccount(userID: user.uid)
+                }
             }
             self.user = user
         }

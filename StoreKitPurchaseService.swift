@@ -28,7 +28,6 @@ enum StoreKitPurchaseOutcome: Equatable, Sendable {
 enum StoreKitPurchaseServiceError: Error, Equatable, LocalizedError, Sendable {
     case productUnavailable
     case accountTokenUnavailable
-    case backendVerificationUnavailable
     case unverifiedTransaction
 
     var errorDescription: String? {
@@ -37,8 +36,6 @@ enum StoreKitPurchaseServiceError: Error, Equatable, LocalizedError, Sendable {
             return "The selected PenPal product is not available right now."
         case .accountTokenUnavailable:
             return "Purchases are not available until secure account linking is configured."
-        case .backendVerificationUnavailable:
-            return "Backend purchase verification is not configured yet."
         case .unverifiedTransaction:
             return "Apple could not verify this transaction."
         }
@@ -168,14 +165,16 @@ struct StoreKitSubscriptionStatusSnapshot: Equatable, Sendable {
 }
 
 protocol PurchaseTransactionProcessor: Sendable {
-    func process(_ transaction: Transaction) async throws
+    func process(_ transaction: Transaction, signedTransactionInfo: String) async throws
 }
 
-struct DevelopmentPurchaseTransactionProcessor: PurchaseTransactionProcessor {
+struct BackendPurchaseTransactionProcessor: PurchaseTransactionProcessor {
     nonisolated init() {}
 
-    func process(_ transaction: Transaction) async throws {
-        throw StoreKitPurchaseServiceError.backendVerificationUnavailable
+    func process(_ transaction: Transaction, signedTransactionInfo: String) async throws {
+        try await CommerceBackendClient.shared.processAppStoreTransaction(
+            signedTransactionInfo: signedTransactionInfo
+        )
     }
 }
 
@@ -195,7 +194,7 @@ final class StoreKitPurchaseService: ObservableObject {
     private(set) var signedInPenPalUserID: String?
     private(set) var accountTokenState: PenPalAccountTokenState = .unavailableBackendRequired
 
-    init(processor: PurchaseTransactionProcessor = DevelopmentPurchaseTransactionProcessor()) {
+    init(processor: PurchaseTransactionProcessor = BackendPurchaseTransactionProcessor()) {
         self.processor = processor
     }
 
@@ -220,12 +219,26 @@ final class StoreKitPurchaseService: ObservableObject {
         }
     }
 
+    func prepareForSignedInPenPalAccount(userID: String) async {
+        signedInPenPalUserID = userID
+        BackendEntitlementRepository.shared.startObservingCurrentUser()
+
+        do {
+            let token = try await BackendEntitlementRepository.shared.ensureAppAccountToken()
+            configureSignedInPenPalAccount(userID: userID, appAccountToken: token)
+        } catch {
+            accountTokenState = .unavailableBackendRequired
+            lastPurchaseOutcome = .failed(message: error.localizedDescription)
+        }
+    }
+
     func resetForLogout() {
         signedInPenPalUserID = nil
         accountTokenState = .unavailableBackendRequired
         appleLocalSnapshot = .empty
         subscriptionStatuses = []
         lastPurchaseOutcome = nil
+        BackendEntitlementRepository.shared.resetForLogout()
     }
 
     func startTransactionListener() {
@@ -315,6 +328,8 @@ final class StoreKitPurchaseService: ObservableObject {
     func restorePurchases() async -> String? {
         do {
             try await AppStore.sync()
+            await processCurrentEntitlementsWithBackend()
+            try await CommerceBackendClient.shared.reconcileAppStoreEntitlements()
             await refreshCurrentEntitlements()
             return nil
         } catch {
@@ -362,13 +377,19 @@ final class StoreKitPurchaseService: ObservableObject {
         await refreshCurrentEntitlements()
     }
 
+    private func processCurrentEntitlementsWithBackend() async {
+        for await result in Transaction.currentEntitlements {
+            _ = await handleVerifiedPurchaseResult(result)
+        }
+    }
+
     private func handleVerifiedPurchaseResult(_ result: VerificationResult<Transaction>) async -> StoreKitPurchaseOutcome {
         switch result {
         case .verified(let transaction):
             let verifiedTransaction = VerifiedStoreTransaction(transaction: transaction)
 
             do {
-                try await processor.process(transaction)
+                try await processor.process(transaction, signedTransactionInfo: result.jwsRepresentation)
                 await transaction.finish()
                 await refreshCurrentEntitlements()
                 return .verifiedProcessed(verifiedTransaction)

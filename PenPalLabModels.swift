@@ -4,7 +4,7 @@ import FirebaseFirestore
 // MARK: PenPal Lab Feature
 
 enum PenPalLabConfiguration {
-    static let restrictPenPalLabToFounders = false
+    static let restrictPenPalLabToFounders = true
 }
 
 enum PenPalLabCategory: String, CaseIterable, Identifiable {

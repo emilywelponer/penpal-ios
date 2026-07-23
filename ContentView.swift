@@ -1152,11 +1152,11 @@ struct HomeDashboardView: View {
     @StateObject private var groupStore = PenpalGroupStore.shared
     @StateObject private var friendsNewsStore = FriendsNewsStore.shared
     @StateObject private var marginNoteNotificationRouter = MarginNoteNotificationRouter.shared
+    @StateObject private var entitlementRepository = BackendEntitlementRepository.shared
     @State private var groupIssueListeners: [String: ListenerRegistration] = [:]
     @State private var groupUnreadCounts: [String: Int] = [:]
     @State private var notificationIssue: PublishedIssueModel?
     @State private var pendingMarginNoteRoute: MarginNoteNotificationRoute?
-    @State private var isFounderSupporter = false
 
     
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
@@ -1188,7 +1188,6 @@ struct HomeDashboardView: View {
                 profilePattern = profile.profilePattern ?? "plain"
                 nameFontValue = profile.nameFont ?? "serif"
                 nameColorHex = profile.nameColorHex ?? "#000000"
-                isFounderSupporter = profile.founderSupporter
             }
         }
     }
@@ -1202,7 +1201,10 @@ struct HomeDashboardView: View {
                 VStack(spacing: 26) {
                     Spacer().frame(height: 20)
                     
-                    PenPalHeaderMenu(isFounderSupporter: isFounderSupporter)
+                    PenPalHeaderMenu(
+                        isFounderSupporter: entitlementRepository.isFounderSupporter,
+                        plan: entitlementRepository.currentPlan
+                    )
                     
                     Text(appText("Stay in each other's chapters.", languageRaw))
                         .font(.subheadline)
@@ -1463,7 +1465,7 @@ struct ProfileSettingsView: View {
     @AppStorage("nameFont") private var nameFontValue: String = "serif"
     @AppStorage("nameColorHex") private var nameColorHex: String = "#000000"
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
-    @State private var isFounderSupporter = false
+    @StateObject private var entitlementRepository = BackendEntitlementRepository.shared
     
     private var firebaseUser: User? {
         Auth.auth().currentUser
@@ -1475,7 +1477,7 @@ struct ProfileSettingsView: View {
                 Text(appText("Profile", languageRaw))
                     .font(.system(size: 38, weight: .light, design: .serif))
 
-                if isFounderSupporter {
+                if entitlementRepository.isFounderSupporter {
                     FounderSupporterBadge()
                 }
                 
@@ -1510,9 +1512,7 @@ struct ProfileSettingsView: View {
                 print("BLOCKED_QUERY_NO_AUTH", "ProfileSettingsView.onAppear")
                 return
             }
-            FirestoreManager.shared.fetchCurrentUserProfile { profile in
-                isFounderSupporter = profile?.founderSupporter ?? false
-            }
+            entitlementRepository.startObservingCurrentUser()
         }
     }
 }

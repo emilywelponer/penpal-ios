@@ -16,13 +16,14 @@ final class PenPalLabService: ObservableObject {
     @Published var errorMessage = ""
 
     private let db = Firestore.firestore()
+    private let entitlementRepository = BackendEntitlementRepository.shared
     private var listener: ListenerRegistration?
     private var voteListeners: [String: ListenerRegistration] = [:]
 
     private init() {}
 
     var canAccessLab: Bool {
-        !PenPalLabConfiguration.restrictPenPalLabToFounders || currentUserIsFounder
+        !PenPalLabConfiguration.restrictPenPalLabToFounders || entitlementRepository.isFounderSupporter
     }
 
     func refreshEntitlement() {
@@ -34,20 +35,11 @@ final class PenPalLabService: ObservableObject {
             return
         }
 
-        db.collection("users").document(uid).getDocument { [weak self] snapshot, error in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.entitlementChecked = true
-
-                if let error {
-                    self.currentUserIsFounder = false
-                    self.errorMessage = error.localizedDescription
-                    return
-                }
-
-                self.currentUserIsFounder = snapshot?.data()?["founderSupporter"] as? Bool ?? false
-            }
-        }
+        _ = uid
+        entitlementRepository.startObservingCurrentUser()
+        entitlementChecked = !PenPalLabConfiguration.restrictPenPalLabToFounders
+            || entitlementRepository.hasLoadedAuthoritativeEntitlement
+        currentUserIsFounder = entitlementRepository.isFounderSupporter
     }
 
     func startListening(sort: PenPalLabSortOption) {

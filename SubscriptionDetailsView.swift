@@ -1,6 +1,7 @@
 import SwiftUI
 import StoreKit
 import UIKit
+import FirebaseAuth
 
 // MARK: Subscription Navigation
 
@@ -31,14 +32,19 @@ enum PenPalPlan: String {
 
 struct SubscriptionDetailsView: View {
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
+    @StateObject private var entitlementRepository = BackendEntitlementRepository.shared
     var plan: PenPalPlan = .free
     @State private var message = ""
+
+    private var displayedPlan: PenPalPlan {
+        entitlementRepository.currentPlan
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(spacing: 12) {
-                    Image(systemName: plan.symbol)
+                    Image(systemName: displayedPlan.symbol)
                         .font(.title2)
                         .frame(width: 44, height: 44)
                         .background(Color.black.opacity(0.08))
@@ -48,7 +54,7 @@ struct SubscriptionDetailsView: View {
                         Text(appText("Your PenPal Plan", languageRaw))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(appText(plan.titleKey, languageRaw))
+                        Text(appText(displayedPlan.titleKey, languageRaw))
                             .font(.system(size: 32, weight: .light, design: .serif))
                     }
                 }
@@ -67,7 +73,7 @@ struct SubscriptionDetailsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(appText("Renewal information", languageRaw))
                         .font(.headline)
-                    Text(appText("No renewal information is available yet.", languageRaw))
+                    Text(renewalText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -107,8 +113,11 @@ struct SubscriptionDetailsView: View {
 
 struct SubscriptionUpgradeView: View {
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
+    @StateObject private var storeKitService = StoreKitPurchaseService.shared
+    @StateObject private var entitlementRepository = BackendEntitlementRepository.shared
     let currentPlan: PenPalPlan
     @State private var message = ""
+    @State private var purchasingIdentifier: PenPalProductIdentifier?
 
     var body: some View {
         ScrollView {
@@ -116,50 +125,55 @@ struct SubscriptionUpgradeView: View {
                 Text(appText("Upgrade or change plan", languageRaw))
                     .font(.system(size: 32, weight: .light, design: .serif))
 
-                Text(appText("Development Preview", languageRaw))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.black.opacity(0.06))
-                    .clipShape(Capsule())
-
-                ForEach([PenPalPlan.free, .pro, .premium, .founder], id: \.rawValue) { plan in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: plan.symbol)
-                            Text(appText(plan.titleKey, languageRaw))
-                                .font(.headline)
-                            Spacer()
-                            if plan == currentPlan {
-                                Text(appText("Current plan", languageRaw))
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        Text(appText(plan.descriptionKey, languageRaw))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .background(Color.gray.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                if case .loading = storeKitService.productLoadState {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
                 }
+
+                PremiumPurchaseCard(
+                    monthlyProduct: storeKitService.premiumMonthlyProduct,
+                    annualProduct: storeKitService.premiumAnnualProduct,
+                    isPurchasing: purchasingIdentifier != nil,
+                    purchase: purchase
+                )
+
+                FounderPurchaseCard(
+                    founderProduct: storeKitService.founderProduct,
+                    isPurchasing: purchasingIdentifier != nil,
+                    purchase: purchase
+                )
 
                 Button {
-                    message = appText("Subscriptions are not available in this development build yet.", languageRaw)
+                    Task {
+                        message = await SubscriptionActions.restorePurchases(languageRaw: languageRaw)
+                    }
                 } label: {
-                    Text(appText("Continue", languageRaw))
+                    Text(appText("Restore purchases", languageRaw))
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(PenPalStyle.ink)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.black)
+                        .background(Color.black.opacity(0.06))
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(appText("Premium does not include Founder Supporter. Founder Supporter does not include Premium.", languageRaw))
+                    Text(appText("Subscriptions renew automatically until cancelled in your Apple ID settings.", languageRaw))
+                    Text(appText("Access every monthly magazine while Premium is active. Free keeps the latest six months once archive enforcement launches.", languageRaw))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             .padding()
+        }
+        .task {
+            entitlementRepository.startObservingCurrentUser()
+            await storeKitService.loadProducts()
+            if let uid = Auth.auth().currentUser?.uid {
+                await storeKitService.prepareForSignedInPenPalAccount(userID: uid)
+            }
         }
         .alert(appText("Subscriptions", languageRaw), isPresented: Binding(
             get: { !message.isEmpty },
@@ -175,6 +189,35 @@ struct SubscriptionUpgradeView: View {
         .navigationTitle(appText("Upgrade or change plan", languageRaw))
         .navigationBarTitleDisplayMode(.inline)
     }
+
+    private func purchase(_ identifier: PenPalProductIdentifier) {
+        guard purchasingIdentifier == nil else { return }
+        purchasingIdentifier = identifier
+        Task {
+            let outcome = await storeKitService.purchase(identifier)
+            await MainActor.run {
+                purchasingIdentifier = nil
+                message = messageText(for: outcome)
+            }
+        }
+    }
+
+    private func messageText(for outcome: StoreKitPurchaseOutcome) -> String {
+        switch outcome {
+        case .verifiedProcessed:
+            return appText("Purchase verified. Your PenPal access is updating.", languageRaw)
+        case .backendProcessingFailed(_, let message):
+            return message
+        case .unverified:
+            return appText("Apple could not verify this purchase.", languageRaw)
+        case .pending:
+            return appText("Purchase pending. You will get access after Apple approves it.", languageRaw)
+        case .cancelled:
+            return appText("Purchase cancelled.", languageRaw)
+        case .failed(let message):
+            return message
+        }
+    }
 }
 
 enum SubscriptionActions {
@@ -186,12 +229,115 @@ enum SubscriptionActions {
 
     @MainActor
     static func restorePurchases(languageRaw: String) async -> String {
-        do {
-            try await AppStore.sync()
-            return appText("Purchases restored.", languageRaw)
-        } catch {
-            return appText("Purchases could not be restored right now.", languageRaw)
+        let errorMessage = await StoreKitPurchaseService.shared.restorePurchases()
+        if let errorMessage {
+            return errorMessage
         }
+        return appText("Purchases restored.", languageRaw)
+    }
+}
+
+private struct PremiumPurchaseCard: View {
+    @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
+    let monthlyProduct: Product?
+    let annualProduct: Product?
+    let isPurchasing: Bool
+    let purchase: (PenPalProductIdentifier) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label(appText("Premium", languageRaw), systemImage: "crown.fill")
+                .font(.headline)
+
+            Text(appText("Keep your complete magazine story. Access every monthly magazine while Premium is active.", languageRaw))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            purchaseButton(
+                title: appText("Premium Monthly", languageRaw),
+                price: monthlyProduct?.displayPrice,
+                identifier: .premiumMonthly
+            )
+
+            purchaseButton(
+                title: appText("Premium Annual", languageRaw),
+                price: annualProduct?.displayPrice,
+                identifier: .premiumAnnual
+            )
+        }
+        .padding()
+        .background(Color.gray.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func purchaseButton(title: String, price: String?, identifier: PenPalProductIdentifier) -> some View {
+        Button {
+            purchase(identifier)
+        } label: {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(price ?? appText("Unavailable", languageRaw))
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding()
+            .background(price == nil ? Color.gray : Color.black)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .disabled(isPurchasing || price == nil)
+    }
+}
+
+private struct FounderPurchaseCard: View {
+    @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
+    let founderProduct: Product?
+    let isPurchasing: Bool
+    let purchase: (PenPalProductIdentifier) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label(appText("Founder Supporter", languageRaw), systemImage: "flask.fill")
+                .font(.headline)
+
+            Text(appText("One-time purchase. Includes the Founder badge, PenPal Lab, suggestions and voting. Premium is not included.", languageRaw))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Button {
+                purchase(.founderSupporter)
+            } label: {
+                HStack {
+                    Text(appText("Become a Founder Supporter", languageRaw))
+                    Spacer()
+                    Text(founderProduct?.displayPrice ?? appText("Unavailable", languageRaw))
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding()
+                .background(founderProduct == nil ? Color.gray : Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .disabled(isPurchasing || founderProduct == nil)
+        }
+        .padding()
+        .background(Color.gray.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+}
+
+private extension SubscriptionDetailsView {
+    var renewalText: String {
+        if entitlementRepository.hasPremiumAccess,
+           let expiration = entitlementRepository.entitlements.premiumExpirationDate {
+            return "\(appText("Premium active until", languageRaw)) \(expiration.formatted(date: .abbreviated, time: .omitted))."
+        }
+
+        if entitlementRepository.entitlements.isFounderSupporter {
+            return appText("Founder Supporter is a one-time purchase and does not renew.", languageRaw)
+        }
+
+        return appText("No active paid plan.", languageRaw)
     }
 }
 
