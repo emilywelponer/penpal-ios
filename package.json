@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "test:functions": "mocha \"tests/functions/**/*.test.js\"",
-    "test:rules": "mocha \"tests/firestore/**/*.test.js\""
+    "test:rules": "mocha \"tests/firestore/**/*.test.js\" \"tests/storage/**/*.test.js\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4",

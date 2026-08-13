@@ -1,9 +1,16 @@
-const { onDocumentCreated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentDeleted, onDocumentUpdated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { setGlobalOptions } = require("firebase-functions/v2/options");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
+const {
+  deleteDraftStorage,
+  deleteAccountOwnedStorage,
+  deleteIssueStorage,
+  runRetention,
+} = require("./contentLifecycle");
 const crypto = require("crypto");
 const {
   AppStoreServerAPIClient,
@@ -19,6 +26,201 @@ const commerceEntitlements = require("./commerceEntitlements");
 admin.initializeApp();
 
 const db = admin.firestore();
+const bucket = admin.storage().bucket();
+
+const RETENTION_DELETION_ENABLED = process.env.RETENTION_DELETION_ENABLED === "true";
+
+exports.syncPublicProfile = onDocumentWritten("users/{userID}", async (event) => {
+  const { userID } = event.params;
+  const publicRef = db.collection("publicProfiles").doc(userID);
+  if (!event.data || !event.data.after.exists) {
+    await publicRef.delete().catch(() => undefined);
+    return;
+  }
+  const user = event.data.after.data() || {};
+  const allowed = [
+    "username", "displayName", "profileImageData", "bannerColorHex", "patternColorHex",
+    "profilePattern", "nameFont", "nameColorHex",
+  ];
+  const profile = { id: userID, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+  allowed.forEach((key) => {
+    if (user[key] !== undefined) profile[key] = user[key];
+  });
+  if (typeof profile.username !== "string" || typeof profile.displayName !== "string") return;
+  await publicRef.set(profile, { merge: false });
+});
+
+exports.syncPublishedIssueReaders = onDocumentWritten("groups/{groupID}", async (event) => {
+  const groupID = event.params.groupID;
+  const issues = await db.collection("publishedIssues").where("groupIDs", "array-contains", groupID).get();
+  for (const issueDoc of issues.docs) {
+    const issue = issueDoc.data() || {};
+    const readerIDs = new Set([issue.ownerID].filter(Boolean));
+    for (const id of issue.groupIDs || []) {
+      const groupSnap = await db.collection("groups").doc(id).get();
+      if (groupSnap.exists) (groupSnap.data().memberIDs || []).forEach((uid) => readerIDs.add(uid));
+    }
+    await issueDoc.ref.set({ authorizedReaderIDs: Array.from(readerIDs) }, { merge: true });
+  }
+});
+
+exports.cleanupDeletedDraft = onDocumentDeleted({ document: "issueDrafts/{draftID}", retry: true }, async (event) => {
+  const ownerID = event.data && event.data.data().ownerID;
+  if (!ownerID) {
+    logger.warn("DRAFT_CLEANUP_SKIPPED_MISSING_OWNER", event.params);
+    return;
+  }
+  await deleteDraftStorage(bucket, ownerID, event.params.draftID, logger);
+});
+
+exports.cleanupReplacedDraftImages = onDocumentUpdated({ document: "issueDrafts/{draftID}", retry: true }, async (event) => {
+  const before = event.data.before.data() || {};
+  const after = event.data.after.data() || {};
+  const ownerID = after.ownerID;
+  if (!ownerID) return;
+  const current = new Set(after.imageStoragePaths || []);
+  const removed = (before.imageStoragePaths || []).filter((path) => !current.has(path));
+  const safePrefix = `issueDrafts/${ownerID}/${event.params.draftID}/images/`;
+  const safeRemoved = removed.filter((path) => path.startsWith(safePrefix));
+  await Promise.all(safeRemoved.map((path) => bucket.file(path).delete({ ignoreNotFound: true })));
+});
+
+exports.cleanupDeletedPublishedIssue = onDocumentDeleted({ document: "publishedIssues/{issueID}", retry: true }, async (event) => {
+  await deleteIssueStorage(bucket, event.params.issueID, logger);
+});
+
+exports.cleanupClosedUploadSession = onDocumentDeleted({ document: "issueUploadSessions/{issueID}", retry: true }, async (event) => {
+  const issueSnap = await db.collection("publishedIssues").doc(event.params.issueID).get();
+  if (!issueSnap.exists) {
+    await deleteIssueStorage(bucket, event.params.issueID, logger);
+  }
+});
+
+exports.enforceArchiveRetention = onSchedule({ schedule: "every day 03:17", retryCount: 3 }, async () => {
+  const report = await runRetention({
+    db,
+    bucket,
+    logger,
+    deletionEnabled: RETENTION_DELETION_ENABLED,
+  });
+  logger.info("RETENTION_RUN_COMPLETE", {
+    dryRun: !RETENTION_DELETION_ENABLED,
+    inspected: report.length,
+    deleteCandidates: report.filter((item) => item.deleteEligible).length,
+  });
+});
+
+exports.backfillSecurityMetadataV1 = onSchedule({ schedule: "every hour", retryCount: 3 }, async () => {
+  const stateRef = db.collection("systemMigrations").doc("securityMetadataV1");
+  const stateSnap = await stateRef.get();
+  const state = stateSnap.exists ? stateSnap.data() : {};
+  const limit = 500;
+
+  if (state.publicProfilesComplete !== true) {
+    let query = db.collection("users").orderBy(admin.firestore.FieldPath.documentId()).limit(limit);
+    if (state.lastUserID) query = query.startAfter(state.lastUserID);
+    const users = await query.get();
+    for (const userDoc of users.docs) {
+      const user = userDoc.data() || {};
+      if (typeof user.username !== "string" || typeof user.displayName !== "string") continue;
+      const profile = { id: userDoc.id, username: user.username, displayName: user.displayName };
+      ["profileImageData", "bannerColorHex", "patternColorHex", "profilePattern", "nameFont", "nameColorHex"]
+        .forEach((key) => { if (user[key] !== undefined) profile[key] = user[key]; });
+      profile.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      await db.collection("publicProfiles").doc(userDoc.id).set(profile, { merge: true });
+    }
+    await stateRef.set({
+      lastUserID: users.empty ? state.lastUserID || null : users.docs[users.docs.length - 1].id,
+      publicProfilesComplete: users.size < limit,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+
+  if (state.issueReadersComplete !== true) {
+    let query = db.collection("publishedIssues").orderBy(admin.firestore.FieldPath.documentId()).limit(limit);
+    if (state.lastIssueID) query = query.startAfter(state.lastIssueID);
+    const issues = await query.get();
+    for (const issueDoc of issues.docs) {
+      const issue = issueDoc.data() || {};
+      const readers = new Set([issue.ownerID].filter(Boolean));
+      for (const groupID of issue.groupIDs || []) {
+        const groupSnap = await db.collection("groups").doc(groupID).get();
+        if (groupSnap.exists) (groupSnap.data().memberIDs || []).forEach((uid) => readers.add(uid));
+      }
+      await issueDoc.ref.set({ authorizedReaderIDs: Array.from(readers) }, { merge: true });
+    }
+    await stateRef.set({
+      lastIssueID: issues.empty ? state.lastIssueID || null : issues.docs[issues.docs.length - 1].id,
+      issueReadersComplete: issues.size < limit,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+});
+
+exports.deleteMyAccountData = onCall(async (request) => {
+  const uid = requireAuth(request);
+  const userRef = db.collection("users").doc(uid);
+
+  const [drafts, issues, ownedGroups, joinedGroups, outgoing, incoming, notes, suggestions] = await Promise.all([
+    db.collection("issueDrafts").where("ownerID", "==", uid).get(),
+    db.collection("publishedIssues").where("ownerID", "==", uid).get(),
+    db.collection("groups").where("ownerID", "==", uid).get(),
+    db.collection("groups").where("memberIDs", "array-contains", uid).get(),
+    db.collection("friendRequests").where("fromUserID", "==", uid).get(),
+    db.collection("friendRequests").where("toUserID", "==", uid).get(),
+    db.collection("MarginNotes").where("authorID", "==", uid).get(),
+    db.collection("penpalLabSuggestions").where("authorID", "==", uid).get(),
+  ]);
+
+  // Remove owned media before its metadata. Repeating this callable is safe.
+  await deleteAccountOwnedStorage(
+    bucket,
+    uid,
+    drafts.docs.map((doc) => doc.id),
+    issues.docs.map((doc) => doc.id),
+    logger
+  );
+
+  const ownedIDs = new Set(ownedGroups.docs.map((doc) => doc.id));
+  for (const groupDoc of ownedGroups.docs) {
+    const group = groupDoc.data() || {};
+    const remaining = (group.memberIDs || []).filter((memberID) => memberID !== uid);
+    if (remaining.length === 0) {
+      await db.recursiveDelete(groupDoc.ref);
+    } else {
+      await groupDoc.ref.update({ ownerID: remaining[0], memberIDs: remaining });
+    }
+  }
+  for (const groupDoc of joinedGroups.docs) {
+    if (!ownedIDs.has(groupDoc.id)) {
+      await groupDoc.ref.update({ memberIDs: admin.firestore.FieldValue.arrayRemove(uid) });
+    }
+  }
+
+  const friendsSnap = await userRef.get();
+  const friendIDs = friendsSnap.exists ? (friendsSnap.data().friends || []) : [];
+  await Promise.all(friendIDs.map((friendID) => db.collection("users").doc(friendID).set({
+    friends: admin.firestore.FieldValue.arrayRemove(uid),
+  }, { merge: true })));
+
+  const directDeletes = [outgoing, incoming, notes];
+  for (const snapshot of directDeletes) {
+    await Promise.all(snapshot.docs.map((doc) => doc.ref.delete()));
+  }
+  for (const suggestion of suggestions.docs) await db.recursiveDelete(suggestion.ref);
+
+  // Votes are subcollection documents whose stable ID is the user ID.
+  const votes = await db.collectionGroup("votes").where("userID", "==", uid).get();
+  await Promise.all(votes.docs.map((doc) => doc.ref.delete()));
+  await Promise.all(drafts.docs.map((doc) => db.recursiveDelete(doc.ref)));
+  await Promise.all(issues.docs.map((doc) => db.recursiveDelete(doc.ref)));
+  await db.collection("publicProfiles").doc(uid).delete().catch(() => undefined);
+  await db.recursiveDelete(userRef);
+  await admin.auth().deleteUser(uid).catch((error) => {
+    if (error.code !== "auth/user-not-found") throw error;
+  });
+  return { deleted: true };
+});
 const FUNCTIONS_REGION = "us-central1";
 
 setGlobalOptions({ region: FUNCTIONS_REGION });

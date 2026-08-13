@@ -1,8 +1,34 @@
 import Foundation
 import Testing
+import UIKit
+import ImageIO
+import UniformTypeIdentifiers
 @testable import TravelingFriends
 
 struct MonetizationFoundationTests {
+    @Test func uploadedJPEGEncodingStripsGPSMetadata() throws {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32))
+        let sourceImage = renderer.image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+        }
+        let sourceData = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(sourceData, UTType.jpeg.identifier as CFString, 1, nil))
+        let cgImage = try #require(sourceImage.cgImage)
+        let metadata: [CFString: Any] = [kCGImagePropertyGPSDictionary: [
+            kCGImagePropertyGPSLatitude: 45.0,
+            kCGImagePropertyGPSLongitude: 9.0,
+        ]]
+        CGImageDestinationAddImage(destination, cgImage, metadata as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+
+        let metadataImage = try #require(UIImage(data: sourceData as Data))
+        let uploaded = try #require(compressedImageData(from: metadataImage, maxSize: 1200, quality: 0.56, targetMaxBytes: 500_000))
+        let uploadedSource = try #require(CGImageSourceCreateWithData(uploaded as CFData, nil))
+        let properties = CGImageSourceCopyPropertiesAtIndex(uploadedSource, 0, nil) as? [CFString: Any]
+        #expect(properties?[kCGImagePropertyGPSDictionary] == nil)
+    }
+
     @Test func productCatalogueUsesExpectedIdentifiers() {
         #expect(PenPalStoreKitProductCatalog.bundleIdentifier == "com.emily.penpal")
         #expect(PenPalStoreKitProductCatalog.founderProductID == "com.emily.penpal.founder")

@@ -2,296 +2,183 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
-    }
-
-    function founderFields() {
-      return ["founderSupporter", "founderSupporterSince", "founderSupporterTier"];
-    }
-
+    function signedIn() { return request.auth != null; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    function founderFields() { return ["founderSupporter", "founderSupporterSince", "founderSupporterTier"]; }
+    function immutableFields() { return ["id", "ownerID", "createdAt"]; }
     function isFounderSupporter() {
-      return signedIn()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)/privateEntitlements/current).data.isFounderSupporter == true;
+      return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)/privateEntitlements/current).data.isFounderSupporter == true;
     }
-
-    function canAccessPenPalLab() {
-      return isFounderSupporter();
+    function isPremium(uid) {
+      let entitlement = get(/databases/$(database)/documents/users/$(uid)/privateEntitlements/current).data;
+      return entitlement.membershipTier == "premium"
+        && entitlement.premiumStatus in ["active", "gracePeriod"];
     }
-
+    function groupMember(groupId) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIDs;
+    }
+    function legacyIssueGroupMember(data) {
+      return (data.groupIDs.size() > 0 && groupMember(data.groupIDs[0]))
+        || (data.groupIDs.size() > 1 && groupMember(data.groupIDs[1]))
+        || (data.groupIDs.size() > 2 && groupMember(data.groupIDs[2]))
+        || (data.groupIDs.size() > 3 && groupMember(data.groupIDs[3]))
+        || (data.groupIDs.size() > 4 && groupMember(data.groupIDs[4]));
+    }
+    function issueReader(data) {
+      return signedIn() && (data.ownerID == request.auth.uid
+        || (data.authorizedReaderIDs is list && request.auth.uid in data.authorizedReaderIDs)
+        || (!(data.authorizedReaderIDs is list) && legacyIssueGroupMember(data)));
+    }
+    function archiveAccessible(data) {
+      return !data.keys().hasAny(["retentionState"])
+        || !(data.retentionState in ["locked", "purged"])
+        || isPremium(data.ownerID);
+    }
     function canReadPublishedIssue(issueId) {
-      // Keep margin-note reads tied to an existing published issue. The
-      // publishedIssues read rule currently allows all signed-in users.
-      return signedIn()
-        && exists(/databases/$(database)/documents/publishedIssues/$(issueId));
+      let issue = get(/databases/$(database)/documents/publishedIssues/$(issueId)).data;
+      return issueReader(issue) && archiveAccessible(issue);
+    }
+    function validPublicProfile(data, uid) {
+      return data.keys().hasOnly(["id", "username", "displayName", "profileImageData", "bannerColorHex", "patternColorHex", "profilePattern", "nameFont", "nameColorHex", "updatedAt"])
+        && data.id == uid && data.username is string && data.displayName is string;
     }
 
-    function marginNoteIdMatches(noteId, data) {
-      return data.magazineID is string
-        && data.pageIndex is int
-        && noteId.matches("^" + data.magazineID + "_[0-9]+_" + request.auth.uid + "$");
-    }
-
-    function hasValidMarginNoteShape(data, noteId) {
-      return data.keys().hasOnly([
-          "noteID",
-          "magazineID",
-          "pageIndex",
-          "authorID",
-          "authorName",
-          "authorUsername",
-          "authorDisplayName",
-          "authorPhotoURL",
-          "createdAt",
-          "updatedAt",
-          "text"
-        ])
-        && data.keys().hasAll([
-          "noteID",
-          "magazineID",
-          "pageIndex",
-          "authorID",
-          "createdAt",
-          "updatedAt",
-          "text"
-        ])
-        && data.noteID == noteId
-        && data.authorID == request.auth.uid
-        && marginNoteIdMatches(noteId, data)
-        && data.pageIndex >= 0
-        && data.text is string
-        && data.text.size() <= 250
-        && (!("authorName" in data) || data.authorName is string)
-        && (!("authorUsername" in data) || data.authorUsername is string)
-        && (!("authorDisplayName" in data) || data.authorDisplayName is string)
-        && (!("authorPhotoURL" in data) || data.authorPhotoURL is string)
-        && canReadPublishedIssue(data.magazineID);
-    }
-
-    function existingViewedBy() {
-      return resource.data.viewedBy is list ? resource.data.viewedBy : [];
-    }
-
-    function validPenPalLabCategory(category) {
-      return category in ["feature", "design", "magazine_page", "bug", "other"];
-    }
-
-    function validPenPalLabSuggestionCreate(data) {
-      return data.keys().hasOnly([
-          "authorID",
-          "authorDisplayName",
-          "title",
-          "description",
-          "category",
-          "status",
-          "isVisible",
-          "createdAt",
-          "updatedAt",
-          "voteCount"
-        ])
-        && data.keys().hasAll([
-          "authorID",
-          "authorDisplayName",
-          "title",
-          "description",
-          "category",
-          "status",
-          "isVisible",
-          "createdAt",
-          "updatedAt",
-          "voteCount"
-        ])
-        && data.authorID == request.auth.uid
-        && data.authorDisplayName is string
-        && data.authorDisplayName.size() <= 120
-        && data.title is string
-        && data.title.size() > 0
-        && data.title.size() <= 100
-        && data.description is string
-        && data.description.size() > 0
-        && data.description.size() <= 2000
-        && validPenPalLabCategory(data.category)
-        && data.status == "under_review"
-        && data.isVisible == true
-        && data.voteCount == 0;
-    }
-
-    match /groups/{groupId} {
-      allow read, write: if request.auth != null;
+    match /publicProfiles/{userId} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(userId) && validPublicProfile(request.resource.data, userId);
+      allow delete: if isSelf(userId);
     }
 
     match /users/{userId} {
-      // The owner can always read their own profile. Other signed-in users
-      // retain profile reads because friends and group member lists use them.
-      allow read: if request.auth != null;
-      allow create, delete: if request.auth != null
-        && request.auth.uid == userId
-        && !request.resource.data.keys().hasAny(founderFields());
-      allow update: if request.auth != null
-        && (
-          (
-            request.auth.uid == userId
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(founderFields())
-          )
-          || (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["friends"])
-            && (
-              request.auth.uid in request.resource.data.friends
-              || request.auth.uid in resource.data.friends
-            )
-          )
-        );
-
-      match /fcmTokens/{tokenId} {
-        allow read, create, update, delete: if request.auth != null
-          && request.auth.uid == userId;
-      }
-
+      allow read: if isSelf(userId);
+      allow create: if isSelf(userId) && !request.resource.data.keys().hasAny(founderFields());
+      allow delete: if isSelf(userId);
+      allow update: if signedIn() && (
+        (isSelf(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(founderFields()))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["friends"])
+          && (request.auth.uid in request.resource.data.friends || request.auth.uid in resource.data.friends))
+      );
+      match /fcmTokens/{tokenId} { allow read, write: if isSelf(userId); }
       match /privateEntitlements/{documentId} {
-        allow read: if request.auth != null
-          && request.auth.uid == userId
-          && documentId == "current";
-        allow create, update, delete: if false;
+        allow read: if isSelf(userId) && documentId == "current";
+        allow write: if false;
       }
+    }
+
+    match /groups/{groupId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.memberIDs;
+      allow create: if signedIn()
+        && request.resource.data.id == groupId
+        && request.resource.data.ownerID == request.auth.uid
+        && request.resource.data.memberIDs == [request.auth.uid];
+      allow update: if signedIn() && (
+        (resource.data.ownerID == request.auth.uid
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.createdAt == resource.data.createdAt
+          && (request.resource.data.ownerID == resource.data.ownerID
+            || request.resource.data.ownerID in request.resource.data.memberIDs))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["memberIDs"])
+          && !(request.auth.uid in resource.data.memberIDs)
+          && request.auth.uid in request.resource.data.memberIDs
+          && request.resource.data.memberIDs.size() == resource.data.memberIDs.size() + 1
+          && request.resource.data.memberIDs.hasAll(resource.data.memberIDs))
+      );
+      allow delete: if signedIn() && resource.data.ownerID == request.auth.uid;
+      match /goldenHeartMonths/{monthId} { allow read: if groupMember(groupId); allow write: if false; }
     }
 
     match /friendRequests/{requestId} {
-      allow get: if request.auth != null
-        && (
-          requestId.matches(request.auth.uid + "_.*")
-          || requestId.matches(".*_" + request.auth.uid)
-          || (
-            resource.data.toUserID == request.auth.uid
-            || resource.data.fromUserID == request.auth.uid
-          )
-        );
-
-      allow list: if request.auth != null
-        && (
-          resource.data.toUserID == request.auth.uid
-          || resource.data.fromUserID == request.auth.uid
-        );
-
-      allow create: if request.auth != null
-        && requestId == request.resource.data.fromUserID + "_" + request.resource.data.toUserID
-        && request.resource.data.id == requestId
-        && request.resource.data.fromUserID == request.auth.uid
-        && request.resource.data.toUserID is string
-        && request.resource.data.toUserID != request.auth.uid
+      allow get: if signedIn() && (resource.data.toUserID == request.auth.uid || resource.data.fromUserID == request.auth.uid);
+      allow list: if signedIn() && (resource.data.toUserID == request.auth.uid || resource.data.fromUserID == request.auth.uid);
+      allow create: if signedIn() && requestId == request.resource.data.fromUserID + "_" + request.resource.data.toUserID
+        && request.resource.data.id == requestId && request.resource.data.fromUserID == request.auth.uid
+        && request.resource.data.toUserID is string && request.resource.data.toUserID != request.auth.uid
         && request.resource.data.status == "pending"
-        && request.resource.data.keys().hasOnly([
-          "id",
-          "fromUserID",
-          "fromUsername",
-          "fromDisplayName",
-          "toUserID",
-          "toUsername",
-          "status",
-          "createdAt"
-        ]);
-
-      allow update: if request.auth != null
-        && resource.data.toUserID == request.auth.uid
+        && request.resource.data.keys().hasOnly(["id", "fromUserID", "fromUsername", "fromDisplayName", "toUserID", "toUsername", "status", "createdAt"]);
+      allow update: if signedIn() && resource.data.toUserID == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"])
         && request.resource.data.status in ["accepted", "declined"];
-
-      allow delete: if request.auth != null
-        && (
-          resource.data.toUserID == request.auth.uid
-          || resource.data.fromUserID == request.auth.uid
-        );
+      allow delete: if signedIn() && (resource.data.toUserID == request.auth.uid || resource.data.fromUserID == request.auth.uid);
     }
 
     match /issueDrafts/{draftId} {
-      allow create: if request.auth != null
-        && request.resource.data.ownerID == request.auth.uid;
-      allow read, update, delete: if request.auth != null
-        && resource.data.ownerID == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.ownerID == request.auth.uid && request.resource.data.id == draftId;
+      allow read, delete: if signedIn() && resource.data.ownerID == request.auth.uid;
+      allow update: if signedIn() && resource.data.ownerID == request.auth.uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(immutableFields());
+    }
+
+    match /issueUploadSessions/{issueId} {
+      allow create: if signedIn() && request.resource.data.ownerID == request.auth.uid && request.resource.data.issueID == issueId;
+      allow read, delete: if signedIn() && resource.data.ownerID == request.auth.uid;
+      allow update: if signedIn() && resource.data.ownerID == request.auth.uid
+        && request.resource.data.ownerID == resource.data.ownerID && request.resource.data.issueID == resource.data.issueID;
     }
 
     match /publishedIssues/{issueId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-        && request.resource.data.ownerID == request.auth.uid;
-      allow update: if request.auth != null
-        && resource.data.ownerID == request.auth.uid;
-      allow update: if request.auth != null
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["viewedBy"])
-        && request.resource.data.viewedBy is list
-        && request.resource.data.viewedBy.hasAll(existingViewedBy())
-        && request.auth.uid in request.resource.data.viewedBy;
-      allow delete: if request.auth != null
-        && resource.data.ownerID == request.auth.uid;
+      allow read: if issueReader(resource.data);
+      allow create: if signedIn() && request.resource.data.ownerID == request.auth.uid
+        && request.resource.data.id == issueId && archiveAccessible(request.resource.data);
+      allow update: if signedIn() && (
+        (resource.data.ownerID == request.auth.uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(immutableFields()))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["viewedBy"])
+          && archiveAccessible(resource.data) && issueReader(resource.data)
+          && request.resource.data.viewedBy is list
+          && request.resource.data.viewedBy.hasAll(resource.data.viewedBy)
+          && request.auth.uid in request.resource.data.viewedBy)
+      );
+      allow delete: if signedIn() && resource.data.ownerID == request.auth.uid;
     }
 
-    // MARK: Margin Notes Feature
+    function marginNoteIdMatches(noteId, data) {
+      return data.magazineID is string && data.pageIndex is int
+        && noteId.matches("^" + data.magazineID + "_[0-9]+_" + request.auth.uid + "$");
+    }
+    function validMarginNote(data, noteId) {
+      return data.keys().hasOnly(["noteID", "magazineID", "pageIndex", "authorID", "authorName", "authorUsername", "authorDisplayName", "authorPhotoURL", "createdAt", "updatedAt", "text"])
+        && data.keys().hasAll(["noteID", "magazineID", "pageIndex", "authorID", "createdAt", "updatedAt", "text"])
+        && data.noteID == noteId && data.authorID == request.auth.uid && marginNoteIdMatches(noteId, data)
+        && data.pageIndex >= 0 && data.text is string && data.text.size() <= 250
+        && canReadPublishedIssue(data.magazineID);
+    }
     match /MarginNotes/{noteId} {
-      allow read: if signedIn()
-        && resource.data.magazineID is string
-        && canReadPublishedIssue(resource.data.magazineID);
-
-      allow create: if signedIn()
-        && hasValidMarginNoteShape(request.resource.data, noteId);
-
-      allow update: if signedIn()
-        && resource.data.authorID == request.auth.uid
-        && resource.data.noteID == noteId
-        && marginNoteIdMatches(noteId, resource.data)
-        && hasValidMarginNoteShape(request.resource.data, noteId)
+      allow read: if signedIn() && canReadPublishedIssue(resource.data.magazineID);
+      allow create: if signedIn() && validMarginNote(request.resource.data, noteId);
+      allow update: if signedIn() && resource.data.authorID == request.auth.uid && validMarginNote(request.resource.data, noteId)
         && request.resource.data.authorID == resource.data.authorID
         && request.resource.data.magazineID == resource.data.magazineID
         && request.resource.data.pageIndex == resource.data.pageIndex
         && request.resource.data.createdAt == resource.data.createdAt;
-
-      allow delete: if signedIn()
-        && resource.data.authorID == request.auth.uid
-        && resource.data.noteID == noteId
-        && marginNoteIdMatches(noteId, resource.data);
+      allow delete: if signedIn() && resource.data.authorID == request.auth.uid;
     }
 
-    // MARK: PenPal Lab Feature
+    function validCategory(category) { return category in ["feature", "design", "magazine_page", "bug", "other"]; }
+    function validSuggestion(data) {
+      return data.keys().hasOnly(["authorID", "authorDisplayName", "title", "description", "category", "status", "isVisible", "createdAt", "updatedAt", "voteCount"])
+        && data.authorID == request.auth.uid && data.authorDisplayName is string && data.authorDisplayName.size() <= 120
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 100
+        && data.description is string && data.description.size() > 0 && data.description.size() <= 2000
+        && validCategory(data.category) && data.status == "under_review" && data.isVisible == true && data.voteCount == 0;
+    }
     match /penpalLabSuggestions/{suggestionId} {
-      allow read: if canAccessPenPalLab();
-      allow create: if canAccessPenPalLab()
-        && validPenPalLabSuggestionCreate(request.resource.data);
+      allow read: if isFounderSupporter();
+      allow create: if isFounderSupporter() && validSuggestion(request.resource.data);
       allow update, delete: if false;
-
       match /votes/{userId} {
-        allow read: if canAccessPenPalLab();
-        allow create: if canAccessPenPalLab()
-          && userId == request.auth.uid
+        allow read: if isFounderSupporter();
+        allow create: if isFounderSupporter() && userId == request.auth.uid
           && request.resource.data.keys().hasOnly(["userID", "createdAt"])
-          && request.resource.data.keys().hasAll(["userID", "createdAt"])
           && request.resource.data.userID == request.auth.uid;
-        allow delete: if canAccessPenPalLab()
-          && userId == request.auth.uid
-          && resource.data.userID == request.auth.uid;
+        allow delete: if isFounderSupporter() && userId == request.auth.uid && resource.data.userID == request.auth.uid;
         allow update: if false;
       }
     }
 
-    match /notificationEvents/{eventId} {
-      allow read, write: if false;
-    }
-
-    match /appAccountTokens/{tokenId} {
-      allow read, write: if false;
-    }
-
-    match /appStoreOriginalTransactions/{transactionId} {
-      allow read, write: if false;
-    }
-
-    match /appStoreTransactions/{transactionId} {
-      allow read, write: if false;
-    }
-
-    match /appStoreNotificationEvents/{eventId} {
-      allow read, write: if false;
-    }
-
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    match /notificationEvents/{id} { allow read, write: if false; }
+    match /appAccountTokens/{id} { allow read, write: if false; }
+    match /appStoreOriginalTransactions/{id} { allow read, write: if false; }
+    match /appStoreTransactions/{id} { allow read, write: if false; }
+    match /appStoreNotificationEvents/{id} { allow read, write: if false; }
+    match /{document=**} { allow read, write: if false; }
   }
 }

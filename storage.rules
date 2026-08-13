@@ -2,42 +2,67 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    match /issueDrafts/{ownerID}/{draftID}/previews/{fileName} {
-      allow read: if request.auth != null && request.auth.uid == ownerID;
-      allow write: if request.auth != null
-        && request.auth.uid == ownerID
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType == 'image/jpeg';
+    function signedIn() { return request.auth != null; }
+    function issue(issueID) { return firestore.get(/databases/(default)/documents/publishedIssues/$(issueID)); }
+    function session(issueID) { return firestore.get(/databases/(default)/documents/issueUploadSessions/$(issueID)); }
+    function premium(uid) {
+      let e = firestore.get(/databases/(default)/documents/users/$(uid)/privateEntitlements/current).data;
+      return e.membershipTier == 'premium' && e.premiumStatus in ['active', 'gracePeriod'];
     }
-
-    match /issueDrafts/{ownerID}/{draftID}/draftData/{fileName} {
-      allow read: if request.auth != null && request.auth.uid == ownerID;
-      allow write: if request.auth != null
-        && request.auth.uid == ownerID
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType == 'application/json';
+    function archiveAccessible(data) {
+      return !data.keys().hasAny(['retentionState'])
+        || !(data.retentionState in ['locked', 'purged'])
+        || premium(data.ownerID);
     }
-
-    match /issueDrafts/{ownerID}/{draftID}/images/{fileName} {
-      allow read: if request.auth != null && request.auth.uid == ownerID;
-      allow write: if request.auth != null
-        && request.auth.uid == ownerID
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType == 'image/jpeg';
+    function groupMember(groupID) {
+      return request.auth.uid in firestore.get(/databases/(default)/documents/groups/$(groupID)).data.memberIDs;
     }
+    function legacyGroupReader(data) {
+      return (data.groupIDs.size() > 0 && groupMember(data.groupIDs[0]))
+        || (data.groupIDs.size() > 1 && groupMember(data.groupIDs[1]))
+        || (data.groupIDs.size() > 2 && groupMember(data.groupIDs[2]))
+        || (data.groupIDs.size() > 3 && groupMember(data.groupIDs[3]))
+        || (data.groupIDs.size() > 4 && groupMember(data.groupIDs[4]));
+    }
+    function authorizedReader(issueID) {
+      let data = issue(issueID).data;
+      return signedIn() && archiveAccessible(data) && (data.ownerID == request.auth.uid
+        || (data.authorizedReaderIDs is list && request.auth.uid in data.authorizedReaderIDs)
+        || (!(data.authorizedReaderIDs is list) && legacyGroupReader(data)));
+    }
+    function publishedOwner(issueID) {
+      return signedIn()
+        && ((firestore.exists(/databases/(default)/documents/publishedIssues/$(issueID))
+          && issue(issueID).data.ownerID == request.auth.uid)
+        || (firestore.exists(/databases/(default)/documents/issueUploadSessions/$(issueID))
+          && session(issueID).data.ownerID == request.auth.uid));
+    }
+    function validJPEG() { return request.resource.size < 10 * 1024 * 1024 && request.resource.contentType == 'image/jpeg'; }
+    function validJSON() { return request.resource.size < 10 * 1024 * 1024 && request.resource.contentType == 'application/json'; }
 
-    match /publishedIssues/{issueID}/pages/{fileName} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType == 'image/jpeg';
+    match /issueDrafts/{ownerID}/{draftID}/{allPaths=**} {
+      allow read: if signedIn() && request.auth.uid == ownerID;
+      allow create, update: if signedIn() && request.auth.uid == ownerID && (
+        (allPaths.matches('images/.*') && validJPEG())
+        || (allPaths.matches('previews/.*') && validJPEG())
+        || (allPaths.matches('draftData/.*') && validJSON()));
+      allow delete: if signedIn() && request.auth.uid == ownerID;
     }
 
     match /publishedIssues/{issueID}/images/{fileName} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType == 'image/jpeg';
+      allow read: if authorizedReader(issueID);
+      allow create, update: if publishedOwner(issueID) && validJPEG();
+      allow delete: if publishedOwner(issueID);
+    }
+    match /publishedIssues/{issueID}/pages/{fileName} {
+      allow read: if authorizedReader(issueID);
+      allow create, update: if publishedOwner(issueID) && validJPEG();
+      allow delete: if publishedOwner(issueID);
+    }
+    match /publishedIssues/{issueID}/draftData/{fileName} {
+      allow read: if authorizedReader(issueID);
+      allow create, update: if publishedOwner(issueID) && validJSON();
+      allow delete: if publishedOwner(issueID);
     }
   }
 }
