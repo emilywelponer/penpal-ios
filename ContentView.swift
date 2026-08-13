@@ -29,6 +29,7 @@ struct PenpalProfile: Identifiable, Hashable {
     var nameColorHex: String?
     var founderSupporter: Bool = false
     var founderSupporterTier: String?
+    var hasArchiveRetentionNotice: Bool = false
 }
 
 struct SavedMagazineIssue: Identifiable {
@@ -259,7 +260,7 @@ enum GroupPublishingReminderScheduler {
         switch AppLanguage(rawValue: languageRaw) ?? .english {
         case .english: return "Time to publish your PenPal issue"
         case .german: return "Zeit, deine PenPal-Ausgabe zu veröffentlichen"
-        case .italian: return "È ora di pubblicare il tuo giornale PenPal"
+        case .italian: return "È il momento di pubblicare il tuo magazine PenPal"
         case .spanish: return "Hora de publicar tu revista PenPal"
         case .french: return "C’est le moment de publier ton magazine PenPal"
         }
@@ -269,7 +270,7 @@ enum GroupPublishingReminderScheduler {
         switch AppLanguage(rawValue: languageRaw) ?? .english {
         case .english: return "Your group’s monthly issue is due today."
         case .german: return "Die monatliche Ausgabe deiner Gruppe ist heute fällig."
-        case .italian: return "Il giornale mensile del tuo gruppo scade oggi."
+        case .italian: return "Il magazine mensile del tuo gruppo è atteso oggi."
         case .spanish: return "La revista mensual de tu grupo vence hoy."
         case .french: return "Le magazine mensuel de ton groupe est attendu aujourd’hui."
         }
@@ -1157,6 +1158,7 @@ struct HomeDashboardView: View {
     @State private var groupUnreadCounts: [String: Int] = [:]
     @State private var notificationIssue: PublishedIssueModel?
     @State private var pendingMarginNoteRoute: MarginNoteNotificationRoute?
+    @State private var showArchiveRetentionNotice = false
 
     
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
@@ -1188,6 +1190,7 @@ struct HomeDashboardView: View {
                 profilePattern = profile.profilePattern ?? "plain"
                 nameFontValue = profile.nameFont ?? "serif"
                 nameColorHex = profile.nameColorHex ?? "#000000"
+                showArchiveRetentionNotice = profile.hasArchiveRetentionNotice
             }
         }
     }
@@ -1319,7 +1322,7 @@ struct HomeDashboardView: View {
                             HomeCardButton(
                                 icon: "plus",
                                 title: t("Create new group", "Neue Gruppe erstellen", "Crea nuovo gruppo", "Crear nuevo grupo", "Créer un groupe"),
-                                subtitle: t("Add people you want to send issues to", "Füge Personen hinzu, denen du Ausgaben senden willst", "Aggiungi persone a cui vuoi inviare i tuoi giornali", "Añade personas a quienes enviar tus ediciones", "Ajoute les personnes à qui envoyer tes numéros")
+                                subtitle: t("Add people you want to send issues to", "Füge Personen hinzu, denen du Ausgaben senden willst", "Aggiungi persone a cui vuoi inviare i tuoi magazine", "Añade personas a quienes enviar tus ediciones", "Ajoute les personnes à qui envoyer tes numéros")
                             )
                         }
                         .buttonStyle(.plain)
@@ -1353,6 +1356,11 @@ struct HomeDashboardView: View {
             }
             .navigationDestination(item: $notificationIssue) { issue in
                 PublishedIssueDetailView(issue: issue)
+            }
+            .alert(appText("Archive retention notice", languageRaw), isPresented: $showArchiveRetentionNotice) {
+                Button(appText("OK", languageRaw), role: .cancel) {}
+            } message: {
+                Text(appText("As a Free member, issues older than two months are locked. After an additional one-month grace period, their media may be permanently deleted and cannot be recovered. Premium keeps the complete archive while active.", languageRaw))
             }
         }
     }
@@ -2487,7 +2495,7 @@ struct PreprintReviewView: View {
                                 .tint(.white)
                         }
                         
-                        Text(isPublishing ? t("Publishing...", "Wird veröffentlicht...", "Pubblicazione...", "Publicando...", "Publication...") : t("Publish / Send", "Veröffentlichen / Senden", "Pubblica / Invia", "Publicar / Enviar", "Publier / Envoyer"))
+                        Text(isPublishing ? t("Publishing...", "Wird veröffentlicht...", "Pubblicazione…", "Publicando...", "Publication...") : t("Publish / Send", "Veröffentlichen / Senden", "Pubblica / Invia", "Publicar / Enviar", "Publier / Envoyer"))
                             .font(.headline)
                     }
                     .foregroundStyle(.white)
@@ -2507,7 +2515,7 @@ struct PreprintReviewView: View {
                                 .tint(.white)
                         }
                         
-                        Text(isSavingDraft ? t("Saving...", "Wird gespeichert...", "Salvataggio...", "Guardando...", "Sauvegarde...") : t("Save draft", "Entwurf speichern", "Salva bozza", "Guardar borrador", "Sauvegarder le brouillon"))
+                        Text(isSavingDraft ? t("Saving...", "Wird gespeichert...", "Salvataggio…", "Guardando...", "Sauvegarde...") : t("Save draft", "Entwurf speichern", "Salva bozza", "Guardar borrador", "Sauvegarder le brouillon"))
                             .font(.headline)
                     }
                     .foregroundStyle(.white)
@@ -2559,7 +2567,7 @@ struct PreprintReviewView: View {
         isSavingDraft = true
         messageText = ""
         
-        let title = "\(displayName)'s \(t("Draft Issue", "Entwurf-Ausgabe", "Bozza giornale", "Borrador de edición", "Brouillon de numéro"))"
+        let title = localizedDraftTitle(owner: displayName, languageRaw: languageRaw)
 
         let draftID = issueStore.currentDraftID ?? UUID().uuidString
         let scheme = issueStore.currentColourScheme ?? PenPalColourScheme.inferred(from: issueStore.pages) ?? .clean
@@ -2572,7 +2580,7 @@ struct PreprintReviewView: View {
                     issueStore.currentDraftTitle = title
                     issueStore.currentColourScheme = scheme
                     isSavingDraft = false
-                    messageText = t("Draft saved locally. Syncing backup...", "Entwurf lokal gespeichert. Backup wird synchronisiert...", "Bozza salvata sul dispositivo. Sincronizzazione...", "Borrador guardado en el dispositivo. Sincronizando...", "Brouillon enregistré sur l’appareil. Synchronisation...")
+                    messageText = t("Draft saved locally. Syncing backup...", "Entwurf lokal gespeichert. Backup wird synchronisiert...", "Bozza salvata sul dispositivo. Sincronizzazione…", "Borrador guardado en el dispositivo. Sincronizando...", "Brouillon enregistré sur l’appareil. Synchronisation...")
                     showSentMessage = true
                     syncDraftBackup(draftID: draftID, title: title, colourScheme: scheme)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
@@ -2606,6 +2614,7 @@ struct PreprintReviewView: View {
                 title: title,
                 pageImageData: [],
                 pageDraftData: pageDraftData,
+                imageStoragePaths: preparedPages.flatMap(\.elements).compactMap(\.imageStoragePath),
                 draftID: draftID,
                 colourScheme: colourScheme
             ) { error in
@@ -2698,7 +2707,7 @@ struct PreprintReviewView: View {
                             return
                         }
 
-                        messageText = t("Your issue is on its way 💌", "Deine Ausgabe ist unterwegs 💌", "Il tuo giornale è in arrivo 💌", "Tu edición está en camino 💌", "Ton numéro est en route 💌")
+                            messageText = t("Your issue is on its way 💌", "Deine Ausgabe ist unterwegs 💌", "Il tuo magazine è in arrivo 💌", "Tu edición está en camino 💌", "Ton numéro est en route 💌")
                         showSentMessage = true
 
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {

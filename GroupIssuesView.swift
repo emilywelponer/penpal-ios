@@ -59,10 +59,16 @@ struct GroupIssuesView: View {
             } else {
                 ForEach(monthIssues) { issue in
                     Button {
-                        openIssue(issue)
+                        if !issue.isRetentionLocked || BackendEntitlementRepository.shared.hasPremiumAccess {
+                            openIssue(issue)
+                        }
                     } label: {
-                        GroupIssueTextRow(issue: issue)
-                            .contentShape(Rectangle())
+                        HStack {
+                            GroupIssueTextRow(issue: issue)
+                            if issue.isRetentionLocked && !BackendEntitlementRepository.shared.hasPremiumAccess {
+                                Image(systemName: "lock.fill").foregroundStyle(.secondary)
+                            }
+                        }.contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
@@ -314,8 +320,14 @@ private struct GroupPublishedIssueDetailView: View {
             return cleanTitle
         }
 
-        let suffix = (AppLanguage(rawValue: languageRaw) ?? .english) == .spanish ? "Edición" : "Issue"
-        return "\(cleanTitle) \(localizedFullMonthName(for: issue.month, languageRaw: languageRaw)) \(suffix)"
+        switch AppLanguage(rawValue: languageRaw) ?? .english {
+        case .german:
+            return localizedIssueTitle(owner: cleanTitle, month: issue.month, languageRaw: languageRaw)
+        case .spanish:
+            return "\(cleanTitle) \(localizedFullMonthName(for: issue.month, languageRaw: languageRaw)) Edición"
+        default:
+            return "\(cleanTitle) \(localizedFullMonthName(for: issue.month, languageRaw: languageRaw)) Issue"
+        }
     }
 
     private func loadIssue() async {

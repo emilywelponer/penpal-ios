@@ -131,6 +131,7 @@ struct SavedDraftsView: View {
 
 private struct SavedDraftRow: View {
     let draft: SavedIssueDraftModel
+    @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
     @State private var previewImageData: String?
     @State private var firstLocalPage: MagazinePage?
     @State private var isLoadingPreview = false
@@ -176,7 +177,7 @@ private struct SavedDraftRow: View {
                 Text(draft.title)
                     .font(.headline)
                 
-                Text(displayDate.formatted(date: .abbreviated, time: .shortened))
+                Text(localizedDateTime(displayDate, languageRaw: languageRaw))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

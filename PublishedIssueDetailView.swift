@@ -8,6 +8,7 @@ enum PublishedIssueDetailSource {
 }
 
 struct PublishedIssueDetailView: View {
+    @StateObject private var entitlementRepository = BackendEntitlementRepository.shared
     let issue: PublishedIssueModel
     let source: PublishedIssueDetailSource
     let allowBase64Fallback: Bool
@@ -90,7 +91,15 @@ struct PublishedIssueDetailView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
-                if decodedPages.isEmpty && fallbackPageCount == 0 {
+                if activeIssue.isRetentionLocked && !entitlementRepository.hasPremiumAccess {
+                    Spacer()
+                    Image(systemName: "lock.fill").font(.largeTitle)
+                    Text(appText("This issue is outside the Free archive window. Its media may be permanently deleted after the grace period. Premium restores access only while the media still exists.", languageRaw))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                        .padding()
+                    Spacer()
+                } else if decodedPages.isEmpty && fallbackPageCount == 0 {
                     Spacer()
                     
                     Text(isLoadingDraftData || isLoadingFallbackImage ? appText("Loading draft...", languageRaw) : appText("No pages saved.", languageRaw))

@@ -523,14 +523,14 @@ struct IssueBuilderView: View {
 
     private var sections: [IssueSection] {
         [
-            .init(title: t("Monthly Reset", "Monatsreset", "Reset mensile", "Reinicio mensual", "Reset mensuel"), type: .monthlyReset),
+            .init(title: t("Monthly Reset", "Monatsreset", "Rito mensile", "Reinicio mensual", "Bilan mensuel"), type: .monthlyReset),
             .init(title: t("Tiny Wins", "Kleine Siege", "Piccole vittorie", "Pequeñas victorias", "Petites victoires"), type: .tinyWins),
-            .init(title: t("Hobbies", "Hobbys", "Hobby", "Aficiones", "Loisirs"), type: .hobbies),
+            .init(title: t("Hobbies", "Hobbys", "Passioni", "Aficiones", "Loisirs"), type: .hobbies),
             .init(title: t("Relationships", "Beziehungen", "Relazioni", "Relaciones", "Relations"), type: .relationships),
             .init(title: t("Playlist & Music", "Playlist & Musik", "Playlist & musica", "Playlist y música", "Playlist & musique"), type: .playlist),
             .init(title: t("Cinema", "Filme & Serien", "Cinema", "Cine", "Cinéma"), type: .cinema),
             .init(title: t("Reading", "Lesen", "Letture", "Lectura", "Lecture"), type: .reading),
-            .init(title: t("Food & Recipes", "Essen & Rezepte", "Cibo & ricette", "Comida y recetas", "Cuisine & recettes"), type: .food),
+            .init(title: t("Food & Recipes", "Essen & Rezepte", "Tavola & ricette", "Comida y recetas", "Cuisine & recettes"), type: .food),
             .init(title: t("Travel & Places", "Reisen & Orte", "Viaggi & luoghi", "Viajes y lugares", "Voyages & lieux"), type: .travel),
             .init(title: t("Favourites", "Favoriten", "Preferiti", "Favoritos", "Favoris"), type: .favourites),
             .init(title: t("Affirmations & Goals", "Affirmationen & Ziele", "Affermazioni & obiettivi", "Afirmaciones y metas", "Affirmations & objectifs"), type: .affirmations)
@@ -546,7 +546,7 @@ struct IssueBuilderView: View {
                     Text(t("Tick the sections you want to include this month.", "Wähle die Kapitel aus, die du diesen Monat einschließen willst.", "Seleziona le sezioni che vuoi includere questo mese.", "Marca las secciones que quieres incluir este mes.", "Coche les sections que tu veux inclure ce mois-ci."))
                         .foregroundStyle(.secondary)
                     Divider()
-                    Text(t("Colour scheme", "Farbschema", "Schema colori", "Esquema de color", "Palette couleur")).font(.headline)
+                    Text(t("Colour scheme", "Farbschema", "Schema colori", "Esquema de color", "Palette de couleurs")).font(.headline)
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(PenPalColourScheme.allCases) { scheme in
                             SchemeCard(scheme: scheme, isSelected: selectedScheme == scheme)
@@ -1097,7 +1097,7 @@ struct LockedMagazineEditorView: View {
         isSavingDraft = true
         messageText = ""
 
-        let title = issueStore.currentDraftTitle ?? "\(displayName)'s Draft Issue"
+        let title = issueStore.currentDraftTitle ?? localizedDraftTitle(owner: displayName, languageRaw: languageRaw)
         let draftID = issueStore.currentDraftID ?? UUID().uuidString
 
         let scheme = issueStore.currentColourScheme ?? PenPalColourScheme.inferred(from: issueStore.pages) ?? colourScheme
@@ -1139,6 +1139,7 @@ struct LockedMagazineEditorView: View {
                 title: title,
                 pageImageData: [],
                 pageDraftData: pageDraftData,
+                imageStoragePaths: preparedPages.flatMap(\.elements).compactMap(\.imageStoragePath),
                 draftID: draftID,
                 colourScheme: colourScheme
             ) { error in
@@ -1299,14 +1300,14 @@ struct FinishedMagazinePreviewView: View {
 
     private var sections: [IssueSection] {
         [
-            .init(title: t("Monthly Reset", "Monatsreset", "Reset mensile", "Reinicio mensual", "Reset mensuel"), type: .monthlyReset),
+            .init(title: t("Monthly Reset", "Monatsreset", "Rito mensile", "Reinicio mensual", "Bilan mensuel"), type: .monthlyReset),
             .init(title: t("Tiny Wins", "Kleine Siege", "Piccole vittorie", "Pequeñas victorias", "Petites victoires"), type: .tinyWins),
-            .init(title: t("Hobbies", "Hobbys", "Hobby", "Aficiones", "Loisirs"), type: .hobbies),
+            .init(title: t("Hobbies", "Hobbys", "Passioni", "Aficiones", "Loisirs"), type: .hobbies),
             .init(title: t("Relationships", "Beziehungen", "Relazioni", "Relaciones", "Relations"), type: .relationships),
             .init(title: t("Playlist & Music", "Playlist & Musik", "Playlist & musica", "Playlist y música", "Playlist & musique"), type: .playlist),
             .init(title: t("Cinema", "Filme & Serien", "Cinema", "Cine", "Cinéma"), type: .cinema),
             .init(title: t("Reading", "Lesen", "Letture", "Lectura", "Lecture"), type: .reading),
-            .init(title: t("Food & Recipes", "Essen & Rezepte", "Cibo & ricette", "Comida y recetas", "Cuisine & recettes"), type: .food),
+            .init(title: t("Food & Recipes", "Essen & Rezepte", "Tavola & ricette", "Comida y recetas", "Cuisine & recettes"), type: .food),
             .init(title: t("Travel & Places", "Reisen & Orte", "Viaggi & luoghi", "Viajes y lugares", "Voyages & lieux"), type: .travel),
             .init(title: t("Favourites", "Favoriten", "Preferiti", "Favoritos", "Favoris"), type: .favourites),
             .init(title: t("Affirmations & Goals", "Affirmationen & Ziele", "Affermazioni & obiettivi", "Afirmaciones y metas", "Affirmations & objectifs"), type: .affirmations)
@@ -1783,7 +1784,7 @@ struct FinishedMagazinePreviewView: View {
         isSavingDraft = true
         messageText = ""
 
-        let title = issueStore.currentDraftTitle ?? "\(displayName)'s Draft Issue"
+        let title = issueStore.currentDraftTitle ?? localizedDraftTitle(owner: displayName, languageRaw: languageRaw)
         let draftID = issueStore.currentDraftID ?? UUID().uuidString
 
         let scheme = issueStore.currentColourScheme ?? PenPalColourScheme.inferred(from: issueStore.pages) ?? colourScheme
@@ -1833,6 +1834,7 @@ struct FinishedMagazinePreviewView: View {
                 title: title,
                 pageImageData: [],
                 pageDraftData: pageDraftData,
+                imageStoragePaths: preparedPages.flatMap(\.elements).compactMap(\.imageStoragePath),
                 draftID: draftID,
                 colourScheme: colourScheme
             ) { error in
@@ -6214,10 +6216,10 @@ enum MagazineTemplateFactory {
             MagazineElement(type: .text, text: "M", position: CGPoint(x: 22.73, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .text, text: "T", position: CGPoint(x: 43.49, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .text, text: "W", position: CGPoint(x: 64.25, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
-            MagazineElement(type: .text, text: "T", position: CGPoint(x: 85.0, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
+            MagazineElement(type: .text, text: "THU", position: CGPoint(x: 85.0, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .text, text: "F", position: CGPoint(x: 105.75, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .text, text: "S", position: CGPoint(x: 126.5, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
-            MagazineElement(type: .text, text: "S", position: CGPoint(x: 147.25, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
+            MagazineElement(type: .text, text: "SUN", position: CGPoint(x: 147.25, y: 63.23), size: CGSize(width: 20.75, height: 8.82), fontSize: 7.26, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .center, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .line, text: "", position: CGPoint(x: 85.0, y: 69.12), size: CGSize(width: 145.27, height: 0.5), fontSize: 1, fontName: "Helvetica", isBold: false, isEditableText: false),
             MagazineElement(type: .box, text: "", position: CGPoint(x: 22.73, y: 78.68), size: CGSize(width: 20.75, height: 16.18), fontSize: 1, fontName: "Helvetica", isBold: false, isEditableText: false),
             MagazineElement(type: .text, text: "1", position: CGPoint(x: 22.74, y: 74.7), size: CGSize(width: 17.66, height: 5.29), fontSize: 5.64, fontName: "Helvetica", isBold: false, isEditableText: false, textAlignment: .left, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
@@ -6749,7 +6751,7 @@ enum MagazineTemplateFactory {
             MagazineElement(type: .text, text: "RELATIONSHIPS · THE RANKING", position: CGPoint(x: 85.0, y: 14.99), size: CGSize(width: 145.27, height: 5.29), fontSize: 5.64, fontName: "Helvetica", isBold: false, isEditableText: false, textAlignment: .left, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .text, text: "№01 · 21", position: CGPoint(x: 126.73, y: 7.94), size: CGSize(width: 61.82, height: 8.82), fontSize: 6.45, fontName: "Helvetica", isBold: false, isEditableText: false, textAlignment: .right, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .line, text: "", position: CGPoint(x: 85.0, y: 19.41), size: CGSize(width: 145.27, height: 0.5), fontSize: 1, fontName: "Helvetica", isBold: false, isEditableText: false),
-            MagazineElement(type: .text, text: "DATE REVIEW", position: CGPoint(x: 85.0, y: 25.59), size: CGSize(width: 145.27, height: 5.29), fontSize: 5.64, fontName: "Helvetica", isBold: true, isEditableText: true, textAlignment: .left, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
+            MagazineElement(type: .text, text: "RANKING", position: CGPoint(x: 85.0, y: 25.59), size: CGSize(width: 145.27, height: 5.29), fontSize: 5.64, fontName: "Helvetica", isBold: true, isEditableText: true, textAlignment: .left, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .title, text: "The", position: CGPoint(x: 85.0, y: 44.12), size: CGSize(width: 145.27, height: 32.35), fontSize: 24.48, fontName: "Georgia", isBold: false, isEditableText: false, textAlignment: .left, verticalAlignment: .top, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .title, text: "Ranking.", position: CGPoint(x: 85.0, y: 58.83), size: CGSize(width: 145.27, height: 32.35), fontSize: 24.48, fontName: "Georgia", isBold: false, isEditableText: false, textAlignment: .left, verticalAlignment: .top, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .line, text: "", position: CGPoint(x: 85.0, y: 66.18), size: CGSize(width: 145.27, height: 0.5), fontSize: 1, fontName: "Helvetica", isBold: false, isEditableText: false),
@@ -7093,7 +7095,7 @@ enum MagazineTemplateFactory {
             MagazineElement(type: .text, text: "DIRECTED BY", position: CGPoint(x: 81.91, y: 117.0), size: CGSize(width: 126.73, height: 6.2), fontSize: 7.3, fontName: "Helvetica", isBold: true, isEditableText: false, textAlignment: .left, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
             MagazineElement(type: .line, text: "", position: CGPoint(x: 85.0, y: 126.0), size: CGSize(width: 126.73, height: 0.5), fontSize: 1, fontName: "Helvetica", isBold: false, isEditableText: false),
             MagazineElement(type: .text, text: "№ 0001", position: CGPoint(x: 44.82, y: 137.0), size: CGSize(width: 46.36, height: 7.35), fontSize: 8.6, fontName: "Helvetica", isBold: false, isEditableText: false, textAlignment: .left, verticalAlignment: .middle, textInset: CGSize(width: 3.09, height: 1.47)),
-            MagazineElement(type: .text, text: "ROW", position: CGPoint(x: 103.8, y: 137.0), size: CGSize(width: 13.0, height: 6.76), fontSize: 8.6, fontName: "Helvetica", isBold: false, isEditableText: false, textAlignment: .right, verticalAlignment: .middle, textInset: CGSize(width: 0, height: 1.47)),
+            MagazineElement(type: .text, text: "ROW", position: CGPoint(x: 101.3, y: 137.0), size: CGSize(width: 18.0, height: 6.76), fontSize: 8.6, fontName: "Helvetica", isBold: false, isEditableText: false, textAlignment: .right, verticalAlignment: .middle, textInset: CGSize(width: 0, height: 1.47)),
             MagazineElement(type: .line, text: "", position: CGPoint(x: 120.0, y: 141.2), size: CGSize(width: 15.0, height: 0.5), fontSize: 1, fontName: "Helvetica", isBold: false, isEditableText: false),
             MagazineElement(type: .text, text: "", position: CGPoint(x: 120.0, y: 138.2), size: CGSize(width: 15.0, height: 7.2), fontSize: 7.0, fontName: "Helvetica", isBold: false, isEditableText: true, textAlignment: .left, verticalAlignment: .middle, textInset: CGSize(width: 0, height: 1.47)),
             MagazineElement(type: .text, text: "SEAT", position: CGPoint(x: 127.8, y: 137.0), size: CGSize(width: 16.0, height: 6.76), fontSize: 8.6, fontName: "Helvetica", isBold: false, isEditableText: false, textAlignment: .right, verticalAlignment: .middle, textInset: CGSize(width: 0, height: 1.47)),

@@ -62,12 +62,10 @@ struct PenPalHeaderMenu: View {
                 Label(appText("Restore purchases", languageRaw), systemImage: "arrow.clockwise")
             }
 
-            if canOpenPenPalLab {
-                NavigationLink {
-                    PenPalLabView()
-                } label: {
-                    Label(appText("PenPal Lab", languageRaw), systemImage: "flask.fill")
-                }
+            NavigationLink {
+                PenPalLabView()
+            } label: {
+                Label(appText("PenPal Lab", languageRaw), systemImage: "flask.fill")
             }
         } label: {
             Image(systemName: "ellipsis")

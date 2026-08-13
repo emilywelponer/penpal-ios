@@ -22,6 +22,11 @@ struct PublishedIssueModel: Identifiable, Hashable {
     var pageDraftDataPath: String?
     var viewedBy: [String] = []
     var colourSchemeRaw: String?
+    var retentionState: String? = nil
+
+    var isRetentionLocked: Bool {
+        retentionState == "locked" || retentionState == "purged"
+    }
 
     static func == (lhs: PublishedIssueModel, rhs: PublishedIssueModel) -> Bool {
         lhs.id == rhs.id

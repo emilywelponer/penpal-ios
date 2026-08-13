@@ -258,9 +258,10 @@ final class StoreKitPurchaseService: ObservableObject {
 
     func loadProducts() async {
         productLoadState = .loading
+        let requestedProductIDs = PenPalStoreKitProductCatalog.allProductIDs.sorted()
 
         do {
-            let products = try await Product.products(for: Array(PenPalStoreKitProductCatalog.allProductIDs))
+            let products = try await Product.products(for: requestedProductIDs)
             var mappedProducts: [PenPalProductIdentifier: Product] = [:]
 
             for product in products {
@@ -275,12 +276,19 @@ final class StoreKitPurchaseService: ObservableObject {
                 .map(\.rawValue)
                 .sorted()
 
+            Self.logProductLoadingResult(
+                requestedProductIDs: requestedProductIDs,
+                returnedProducts: products,
+                missingProductIDs: missingProductIDs
+            )
+
             productLoadState = missingProductIDs.isEmpty
                 ? .loaded
                 : .unavailable(missingProductIDs: missingProductIDs)
 
             await refreshSubscriptionStatuses()
         } catch {
+            Self.logProductLoadingError(requestedProductIDs: requestedProductIDs, error: error)
             productLoadState = .failed(message: error.localizedDescription)
         }
     }
@@ -333,6 +341,7 @@ final class StoreKitPurchaseService: ObservableObject {
             await refreshCurrentEntitlements()
             return nil
         } catch {
+            Self.logRestoreError(error)
             return error.localizedDescription
         }
     }
@@ -399,5 +408,50 @@ final class StoreKitPurchaseService: ObservableObject {
         case .unverified:
             return .unverified
         }
+    }
+
+    private static func logProductLoadingResult(
+        requestedProductIDs: [String],
+        returnedProducts: [Product],
+        missingProductIDs: [String]
+    ) {
+        #if DEBUG
+        print("Requested StoreKit IDs:")
+        requestedProductIDs.forEach { print("- \($0)") }
+
+        if returnedProducts.isEmpty {
+            print("Returned StoreKit products: <none>")
+            print("StoreKit returned an empty product array.")
+        } else {
+            print("Returned StoreKit products:")
+            returnedProducts
+                .sorted { $0.id < $1.id }
+                .forEach { product in
+                    print("- \(product.id) | \(product.displayName) | \(product.displayPrice) | \(String(describing: product.type))")
+                }
+        }
+
+        if missingProductIDs.isEmpty {
+            print("Missing requested StoreKit IDs: <none>")
+        } else {
+            print("Missing requested StoreKit IDs:")
+            missingProductIDs.forEach { print("- \($0)") }
+        }
+        #endif
+    }
+
+    private static func logProductLoadingError(requestedProductIDs: [String], error: Error) {
+        #if DEBUG
+        print("StoreKit product loading failed.")
+        print("Requested StoreKit IDs:")
+        requestedProductIDs.forEach { print("- \($0)") }
+        print("Error: \(error)")
+        #endif
+    }
+
+    private static func logRestoreError(_ error: Error) {
+        #if DEBUG
+        print("StoreKit restore failed: \(error)")
+        #endif
     }
 }

@@ -58,6 +58,10 @@ final class CommerceBackendClient {
         )
     }
 
+    func deleteMyAccountData() async throws {
+        _ = try await callFunction("deleteMyAccountData", payload: [:])
+    }
+
     private func callFunction(_ name: String, payload: [String: Any]) async throws -> [String: Any] {
         guard let user = Auth.auth().currentUser else {
             throw CommerceBackendClientError.notSignedIn

@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import UIKit
+import FirebaseCore
 import FirebaseFirestore
 import FirebaseAuth
 import FirebaseStorage
@@ -8,6 +9,164 @@ import FirebaseStorage
 extension Notification.Name {
     static let authForceLogout = Notification.Name("PenPalAuthForceLogout")
 }
+
+#if DEBUG
+extension FirestoreManager {
+    /// Creates schema-valid published issues for exercising retention behavior.
+    /// This is compiled out of Release builds and refuses the production project.
+    func createRetentionTestIssue(
+        ownerID: String,
+        createdAtISO8601: String,
+        title: String = "Retention test issue",
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        do {
+            let projectID = try validatedRetentionTestProjectID()
+            guard let signedInUID = Auth.auth().currentUser?.uid else {
+                throw RetentionTestHelperError.notAuthenticated
+            }
+            guard ownerID == signedInUID else {
+                throw RetentionTestHelperError.ownerMustBeSignedInUser
+            }
+            guard let createdAt = Self.retentionTestDateFormatter.date(from: createdAtISO8601) else {
+                throw RetentionTestHelperError.invalidDate
+            }
+
+            let issueID = "retention-test-\(UUID().uuidString.lowercased())"
+            let calendar = Calendar(identifier: .gregorian)
+            let data: [String: Any] = [
+                "id": issueID,
+                "title": title,
+                "ownerID": ownerID,
+                "createdAt": Timestamp(date: createdAt),
+                "month": calendar.component(.month, from: createdAt),
+                "year": calendar.component(.year, from: createdAt),
+                "groupIDs": [],
+                "groupNames": [],
+                "authorizedReaderIDs": [ownerID],
+                "pageImagePaths": [],
+                "viewedBy": [ownerID],
+                "colourScheme": "",
+                "retentionState": "accessible",
+                "isTestData": true,
+                "testDataKind": "retention",
+                "testDataProjectID": projectID,
+                "testDataCreatedBy": ownerID,
+                "testDataCreatedAt": FieldValue.serverTimestamp()
+            ]
+
+            db.collection("publishedIssues").document(issueID).setData(data) { error in
+                DispatchQueue.main.async {
+                    if let error {
+                        completion(.failure(error))
+                    } else {
+                        completion(.success(issueID))
+                    }
+                }
+            }
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
+    /// Deletes only a retention-test issue owned by the signed-in test user.
+    /// The normal Firestore owner-delete rule and backend Storage cleanup still apply.
+    func deleteRetentionTestIssue(
+        issueID: String,
+        completion: @escaping (Error?) -> Void
+    ) {
+        do {
+            _ = try validatedRetentionTestProjectID()
+            guard let signedInUID = Auth.auth().currentUser?.uid else {
+                throw RetentionTestHelperError.notAuthenticated
+            }
+
+            let reference = db.collection("publishedIssues").document(issueID)
+            reference.getDocument { snapshot, error in
+                if let error {
+                    completion(error)
+                    return
+                }
+                guard
+                    let data = snapshot?.data(),
+                    data["isTestData"] as? Bool == true,
+                    data["testDataKind"] as? String == "retention",
+                    data["ownerID"] as? String == signedInUID
+                else {
+                    completion(RetentionTestHelperError.notOwnedRetentionTestData)
+                    return
+                }
+                reference.delete(completion: completion)
+            }
+        } catch {
+            completion(error)
+        }
+    }
+
+    private func validatedRetentionTestProjectID() throws -> String {
+        guard let projectID = FirebaseApp.app()?.options.projectID, !projectID.isEmpty else {
+            throw RetentionTestHelperError.missingProjectID
+        }
+
+        // Never permit the checked-in production project, even if it is accidentally
+        // added to the local allowlist.
+        guard projectID != "penpal-4bf42" else {
+            throw RetentionTestHelperError.productionProjectBlocked(projectID)
+        }
+
+        let normalized = projectID.lowercased()
+        let conventionalTestProject = normalized.hasPrefix("demo-")
+            || normalized.contains("-dev")
+            || normalized.contains("-test")
+            || normalized.contains("-staging")
+            || normalized.contains("emulator")
+        let configuredProjects = ProcessInfo.processInfo.environment["PENPAL_TEST_FIREBASE_PROJECT_IDS"]?
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? []
+
+        guard conventionalTestProject || configuredProjects.contains(projectID) else {
+            throw RetentionTestHelperError.testProjectRequired(projectID)
+        }
+        return projectID
+    }
+
+    private static let retentionTestDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate, .withDashSeparatorInDate]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+}
+
+private enum RetentionTestHelperError: LocalizedError {
+    case missingProjectID
+    case productionProjectBlocked(String)
+    case testProjectRequired(String)
+    case notAuthenticated
+    case ownerMustBeSignedInUser
+    case invalidDate
+    case notOwnedRetentionTestData
+
+    var errorDescription: String? {
+        switch self {
+        case .missingProjectID:
+            return "Firebase project ID is unavailable."
+        case .productionProjectBlocked(let projectID):
+            return "Retention test data is blocked for production project \(projectID)."
+        case .testProjectRequired(let projectID):
+            return "Project \(projectID) is not recognized as test/dev. Add it to PENPAL_TEST_FIREBASE_PROJECT_IDS in the DEBUG scheme."
+        case .notAuthenticated:
+            return "Sign in as the test issue owner first."
+        case .ownerMustBeSignedInUser:
+            return "The selected owner must be the currently signed-in test user."
+        case .invalidDate:
+            return "Use an ISO-8601 calendar date such as 2026-06-13."
+        case .notOwnedRetentionTestData:
+            return "The document is not retention test data owned by the signed-in user."
+        }
+    }
+}
+#endif
 
 final class FirestoreManager: ObservableObject {
     
@@ -148,13 +307,19 @@ final class FirestoreManager: ObservableObject {
         ]
         
         db.collection("users").document(uid).setData(data)
+        db.collection("publicProfiles").document(uid).setData([
+            "id": uid,
+            "username": username,
+            "displayName": displayName,
+            "updatedAt": FieldValue.serverTimestamp()
+        ], merge: true)
     }
     
     func usernameExists(
         username: String,
         completion: @escaping (Bool) -> Void
     ) {
-        db.collection("users")
+        db.collection("publicProfiles")
             .whereField("username", isEqualTo: username)
             .limit(to: 1)
             .getDocuments { snapshot, _ in
@@ -190,6 +355,8 @@ final class FirestoreManager: ObservableObject {
                 completion(nil)
                 return
             }
+
+            self.syncPublicProfile(uid: uid, privateData: data)
             
             completion(
                 PenpalProfile(
@@ -203,10 +370,23 @@ final class FirestoreManager: ObservableObject {
                     nameFont: data["nameFont"] as? String,
                     nameColorHex: data["nameColorHex"] as? String,
                     founderSupporter: data["founderSupporter"] as? Bool ?? false,
-                    founderSupporterTier: data["founderSupporterTier"] as? String
+                    founderSupporterTier: data["founderSupporterTier"] as? String,
+                    hasArchiveRetentionNotice: data["archiveRetentionNotice"] != nil
                 )
             )
         }
+    }
+
+    private func syncPublicProfile(uid: String, privateData: [String: Any]) {
+        let allowedKeys = [
+            "username", "displayName", "profileImageData", "bannerColorHex", "patternColorHex",
+            "profilePattern", "nameFont", "nameColorHex"
+        ]
+        var publicData: [String: Any] = ["id": uid, "updatedAt": FieldValue.serverTimestamp()]
+        for key in allowedKeys where privateData[key] != nil {
+            publicData[key] = privateData[key]
+        }
+        db.collection("publicProfiles").document(uid).setData(publicData, merge: true)
     }
 
     // MARK: Margin Notes Feature
@@ -330,7 +510,7 @@ final class FirestoreManager: ObservableObject {
         username: String,
         completion: @escaping (PenpalProfile?, String?) -> Void
     ) {
-        db.collection("users")
+        db.collection("publicProfiles")
             .whereField("username", isEqualTo: username)
             .limit(to: 1)
             .getDocuments { snapshot, error in
@@ -385,7 +565,7 @@ final class FirestoreManager: ObservableObject {
             return
         }
         
-        db.collection("users")
+        db.collection("publicProfiles")
             .whereField("username", isGreaterThanOrEqualTo: clean)
             .whereField("username", isLessThan: clean + "\u{f8ff}")
             .limit(to: 8)
@@ -443,7 +623,7 @@ final class FirestoreManager: ObservableObject {
         for userID in userIDs {
             group.enter()
             
-            db.collection("users").document(userID).getDocument { document, error in
+            db.collection("publicProfiles").document(userID).getDocument { document, error in
                 defer { group.leave() }
 
                 if self.handleQueryError(error, label: "fetchUserProfiles") {
@@ -1104,6 +1284,7 @@ final class FirestoreManager: ObservableObject {
         ) { draftDataResult in
             switch draftDataResult {
             case .failure(let error):
+                self.rollbackPublishedUpload(issueID: issueID)
                 completion?(error.localizedDescription)
 
             case .success(let pageDraftDataPath):
@@ -1114,9 +1295,11 @@ final class FirestoreManager: ObservableObject {
                 ) { result in
                     switch result {
                     case .failure(let error):
+                        self.rollbackPublishedUpload(issueID: issueID)
                         completion?(error.localizedDescription)
 
                     case .success(let pageImagePaths):
+                        let authorizedReaderIDs = Array(Set(groups.flatMap(\.memberIDs) + [userID]))
                         var data: [String: Any] = [
                             "id": issueID,
                             "title": title,
@@ -1126,6 +1309,7 @@ final class FirestoreManager: ObservableObject {
                             "year": year,
                             "groupIDs": groups.map { $0.id },
                             "groupNames": groups.map { $0.name },
+                            "authorizedReaderIDs": authorizedReaderIDs,
                             "pageImagePaths": pageImagePaths,
                             "viewedBy": [userID],
                             "colourScheme": colourScheme?.rawValue ?? ""
@@ -1137,8 +1321,10 @@ final class FirestoreManager: ObservableObject {
 
                         self.db.collection("publishedIssues").document(issueID).setData(data) { error in
                             if let error {
+                                self.rollbackPublishedUpload(issueID: issueID)
                                 completion?(error.localizedDescription)
                             } else {
+                                self.closePublishedUploadSession(issueID: issueID)
                                 completion?(nil)
                             }
                         }
@@ -1171,10 +1357,12 @@ final class FirestoreManager: ObservableObject {
 
         let mergedGroupIDs = issue.groupIDs + newGroups.map(\.id)
         let mergedGroupNames = issue.groupNames + newGroups.map(\.name)
+        let mergedReaderIDs = Array(Set(newGroups.flatMap(\.memberIDs) + [currentUserID]))
 
         db.collection("publishedIssues").document(issue.id).updateData([
             "groupIDs": mergedGroupIDs,
-            "groupNames": mergedGroupNames
+            "groupNames": mergedGroupNames,
+            "authorizedReaderIDs": FieldValue.arrayUnion(mergedReaderIDs)
         ]) { error in
             completion?(error.map { "Issue could not be sent to more groups: \($0.localizedDescription)" })
         }
@@ -1190,8 +1378,9 @@ final class FirestoreManager: ObservableObject {
             return nil
         }
 
+        guard let uid = Auth.auth().currentUser?.uid else { completion([]); return nil }
         let listener = db.collection("publishedIssues")
-            .whereField("groupIDs", arrayContains: groupID)
+            .whereField("authorizedReaderIDs", arrayContains: uid)
             .addSnapshotListener { snapshot, error in
                 if self.handleListenerError(error, label: "publishedIssues.group") {
                     completion([])
@@ -1204,7 +1393,7 @@ final class FirestoreManager: ObservableObject {
                     return
                 }
 
-                completion(self.makePublishedIssues(from: snapshot, includePayloads: false))
+                completion(self.makePublishedIssues(from: snapshot, includePayloads: false).filter { $0.groupIDs.contains(groupID) })
             }
 
         return track(listener, label: "publishedIssues.group")
@@ -1310,7 +1499,8 @@ final class FirestoreManager: ObservableObject {
             pageDraftData: nil,
             pageDraftDataPath: document.get("pageDraftDataPath") as? String,
             viewedBy: document.get("viewedBy") as? [String] ?? [],
-            colourSchemeRaw: document.get("colourScheme") as? String
+            colourSchemeRaw: document.get("colourScheme") as? String,
+            retentionState: document.get("retentionState") as? String
         )
     }
 
@@ -1343,7 +1533,8 @@ final class FirestoreManager: ObservableObject {
             pageDraftData: includePayloads ? data["pageDraftData"] as? String : nil,
             pageDraftDataPath: data["pageDraftDataPath"] as? String,
             viewedBy: data["viewedBy"] as? [String] ?? [],
-            colourSchemeRaw: data["colourScheme"] as? String
+            colourSchemeRaw: data["colourScheme"] as? String,
+            retentionState: data["retentionState"] as? String
         )
     }
     
@@ -1377,6 +1568,7 @@ final class FirestoreManager: ObservableObject {
         title: String,
         pageImageData: [String],
         pageDraftData: String? = nil,
+        imageStoragePaths: [String] = [],
         draftID: String? = nil,
         colourScheme: PenPalColourScheme? = nil,
         completion: ((String?) -> Void)? = nil
@@ -1415,6 +1607,7 @@ final class FirestoreManager: ObservableObject {
                             "createdAt": Timestamp(date: now),
                             "updatedAt": Timestamp(date: now),
                             "previewImagePaths": previewImagePaths,
+                            "imageStoragePaths": imageStoragePaths,
                             "colourScheme": colourScheme?.rawValue ?? ""
                         ]
                         
@@ -1623,16 +1816,23 @@ final class FirestoreManager: ObservableObject {
             return
         }
 
+        let startUploads = {
         DispatchQueue.global(qos: .userInitiated).async {
             var preparedPages = pages
-            var uploadItems: [(pageIndex: Int, elementIndex: Int, path: String, data: Data)] = []
+            var uploadItems: [(pageIndex: Int, elementIndex: Int, path: String, data: Data?, sourcePath: String?)] = []
 
             for pageIndex in preparedPages.indices {
                 for elementIndex in preparedPages[pageIndex].elements.indices {
                     guard case .image = preparedPages[pageIndex].elements[elementIndex].type else { continue }
 
                     if let existingPath = preparedPages[pageIndex].elements[elementIndex].imageStoragePath, !existingPath.isEmpty {
-                        preparedPages[pageIndex].elements[elementIndex].imageData = nil
+                        if existingPath.hasPrefix(basePath + "/") {
+                            preparedPages[pageIndex].elements[elementIndex].imageData = nil
+                            continue
+                        }
+                        let elementID = preparedPages[pageIndex].elements[elementIndex].id.uuidString
+                        let path = "\(basePath)/page-\(pageIndex)-element-\(elementID).jpg"
+                        uploadItems.append((pageIndex, elementIndex, path, nil, existingPath))
                         continue
                     }
 
@@ -1641,19 +1841,16 @@ final class FirestoreManager: ObservableObject {
                         data = compressedImageData(from: image, maxSize: 1200, quality: 0.56, targetMaxBytes: 500_000)
                     } else if let localPath = preparedPages[pageIndex].elements[elementIndex].localImagePath,
                               !localPath.isEmpty {
-                        let localData = try? Data(contentsOf: URL(fileURLWithPath: localPath))
-                        if let localData, localData.count <= 500_000 {
-                            data = localData
-                        } else if let image = downsampledImageFromFile(path: localPath, maxPixelSize: 1200) {
+                        if let image = downsampledImageFromFile(path: localPath, maxPixelSize: 1200) {
                             data = compressedImageData(from: image, maxSize: 1200, quality: 0.56, targetMaxBytes: 500_000)
                         } else {
-                            data = localData
+                            data = nil
                         }
                     } else if let imageData = preparedPages[pageIndex].elements[elementIndex].imageData, !imageData.isEmpty {
                         if let image = downsampledImageFromBase64(imageData, maxPixelSize: 1200) {
                             data = compressedImageData(from: image, maxSize: 1200, quality: 0.56, targetMaxBytes: 500_000)
                         } else {
-                            data = self.base64Data(from: imageData)
+                            data = nil
                         }
                     } else {
                         data = nil
@@ -1662,7 +1859,7 @@ final class FirestoreManager: ObservableObject {
                     guard let data else { continue }
                     let elementID = preparedPages[pageIndex].elements[elementIndex].id.uuidString
                     let path = "\(basePath)/page-\(pageIndex)-element-\(elementID).jpg"
-                    uploadItems.append((pageIndex, elementIndex, path, data))
+                    uploadItems.append((pageIndex, elementIndex, path, data, nil))
                 }
             }
 
@@ -1676,27 +1873,58 @@ final class FirestoreManager: ObservableObject {
                 var firstError: Error?
                 let group = DispatchGroup()
 
+                var uploadedPaths: [String] = []
+                let lock = NSLock()
                 for item in uploadItems {
                     group.enter()
                     let start = CFAbsoluteTimeGetCurrent()
-                    self.uploadData(item.data, path: item.path, contentType: "image/jpeg") { result in
+                    let uploadPreparedData: (Data?) -> Void = { sourceData in
+                        let privacySafeData: Data?
+                        if item.sourcePath != nil, let sourceData,
+                           let image = downsampledImageFromData(sourceData, maxPixelSize: 1200) {
+                            privacySafeData = compressedImageData(from: image, maxSize: 1200, quality: 0.56, targetMaxBytes: 500_000)
+                        } else {
+                            privacySafeData = sourceData
+                        }
+                        guard let privacySafeData else {
+                            lock.lock(); if firstError == nil { firstError = self.makeStorageError("Could not prepare published image.") }; lock.unlock()
+                            group.leave()
+                            return
+                        }
+                        self.uploadData(privacySafeData, path: item.path, contentType: "image/jpeg") { result in
                         switch result {
                         case .failure(let error):
-                            if firstError == nil {
-                                firstError = error
-                            }
+                            lock.lock(); if firstError == nil { firstError = error }; lock.unlock()
                         case .success(let path):
+                            lock.lock(); uploadedPaths.append(path); lock.unlock()
                             preparedPages[item.pageIndex].elements[item.elementIndex].imageStoragePath = path
                             preparedPages[item.pageIndex].elements[item.elementIndex].imageData = nil
                             let elapsed = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-                            print("MAGAZINE_IMAGE_UPLOAD_SUCCESS", path, "bytes", item.data.count, "elapsedMs", elapsed)
+                            print("MAGAZINE_IMAGE_UPLOAD_SUCCESS", path, "bytes", privacySafeData.count, "elapsedMs", elapsed)
                         }
                         group.leave()
+                        }
+                    }
+                    if let sourcePath = item.sourcePath {
+                        self.storage.reference(withPath: sourcePath).getData(maxSize: 10 * 1024 * 1024) { data, error in
+                            if let error {
+                                lock.lock(); if firstError == nil { firstError = error }; lock.unlock()
+                                group.leave()
+                            } else {
+                                uploadPreparedData(data)
+                            }
+                        }
+                    } else {
+                        uploadPreparedData(item.data)
                     }
                 }
 
                 group.notify(queue: .main) {
                     if let firstError {
+                        self.deleteStorageObjects(paths: uploadedPaths)
+                        if let issueID = self.publishedIssueID(from: basePath) {
+                            self.rollbackPublishedUpload(issueID: issueID)
+                        }
                         completion(.failure(firstError))
                     } else {
                         completion(.success(preparedPages))
@@ -1704,6 +1932,45 @@ final class FirestoreManager: ObservableObject {
                 }
             }
         }
+        }
+
+        if let issueID = publishedIssueID(from: basePath) {
+            beginPublishedUploadSession(issueID: issueID) { error in
+                if let error { completion(.failure(error)) } else { startUploads() }
+            }
+        } else {
+            startUploads()
+        }
+    }
+
+    private func publishedIssueID(from basePath: String) -> String? {
+        let parts = basePath.split(separator: "/")
+        guard parts.count >= 3, parts[0] == "publishedIssues" else { return nil }
+        return String(parts[1])
+    }
+
+    private func beginPublishedUploadSession(issueID: String, completion: @escaping (Error?) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion(makeStorageError("No logged-in user.")); return
+        }
+        db.collection("issueUploadSessions").document(issueID).setData([
+            "issueID": issueID,
+            "ownerID": uid,
+            "createdAt": FieldValue.serverTimestamp(),
+            "expiresAt": Timestamp(date: Date().addingTimeInterval(60 * 60))
+        ], merge: true, completion: completion)
+    }
+
+    private func closePublishedUploadSession(issueID: String) {
+        db.collection("issueUploadSessions").document(issueID).delete()
+    }
+
+    private func rollbackPublishedUpload(issueID: String) {
+        closePublishedUploadSession(issueID: issueID)
+    }
+
+    private func deleteStorageObjects(paths: [String]) {
+        for path in Set(paths) { storage.reference(withPath: path).delete(completion: nil) }
     }
     
     func loadStoredString(
@@ -1883,171 +2150,21 @@ final class FirestoreManager: ObservableObject {
     }
     
     func deleteMyAccount(completion: @escaping (String?) -> Void) {
-        guard let user = Auth.auth().currentUser else {
+        guard Auth.auth().currentUser != nil else {
             completion("No logged-in user.")
             return
         }
 
         AuthEventTracker.record("DELETE_ACCOUNT_CALLED FirestoreManager")
-        let uid = user.uid
-        let group = DispatchGroup()
-        var firstError: String?
-
-        func remember(_ error: Error?) {
-            if let error, firstError == nil {
-                firstError = error.localizedDescription
-            }
-        }
-
-        // Remove me from friends' friend lists
-        group.enter()
-        db.collection("users").document(uid).getDocument { document, error in
-            remember(error)
-
-            let friendIDs = document?.data()?["friends"] as? [String] ?? []
-
-            for friendID in friendIDs {
-                group.enter()
-                self.db.collection("users").document(friendID).updateData([
-                    "friends": FieldValue.arrayRemove([uid])
-                ]) { error in
-                    remember(error)
-                    group.leave()
-                }
-            }
-
-            group.leave()
-        }
-
-        // Delete outgoing friend requests
-        group.enter()
-        db.collection("friendRequests")
-            .whereField("fromUserID", isEqualTo: uid)
-            .getDocuments { snapshot, error in
-                remember(error)
-
-                snapshot?.documents.forEach { doc in
-                    group.enter()
-                    doc.reference.delete { error in
-                        remember(error)
-                        group.leave()
-                    }
-                }
-
-                group.leave()
-            }
-
-        // Delete incoming friend requests
-        group.enter()
-        db.collection("friendRequests")
-            .whereField("toUserID", isEqualTo: uid)
-            .getDocuments { snapshot, error in
-                remember(error)
-
-                snapshot?.documents.forEach { doc in
-                    group.enter()
-                    doc.reference.delete { error in
-                        remember(error)
-                        group.leave()
-                    }
-                }
-
-                group.leave()
-            }
-
-        // Delete groups I own
-        group.enter()
-        db.collection("groups")
-            .whereField("ownerID", isEqualTo: uid)
-            .getDocuments { snapshot, error in
-                remember(error)
-
-                snapshot?.documents.forEach { doc in
-                    group.enter()
-                    doc.reference.delete { error in
-                        remember(error)
-                        group.leave()
-                    }
-                }
-
-                group.leave()
-            }
-
-        // Remove me from groups I joined
-        group.enter()
-        db.collection("groups")
-            .whereField("memberIDs", arrayContains: uid)
-            .getDocuments { snapshot, error in
-                remember(error)
-
-                snapshot?.documents.forEach { doc in
-                    group.enter()
-                    doc.reference.updateData([
-                        "memberIDs": FieldValue.arrayRemove([uid])
-                    ]) { error in
-                        remember(error)
-                        group.leave()
-                    }
-                }
-
-                group.leave()
-            }
-
-        // Delete my published issues
-        group.enter()
-        db.collection("publishedIssues")
-            .whereField("ownerID", isEqualTo: uid)
-            .getDocuments { snapshot, error in
-                remember(error)
-
-                snapshot?.documents.forEach { doc in
-                    group.enter()
-                    doc.reference.delete { error in
-                        remember(error)
-                        group.leave()
-                    }
-                }
-
-                group.leave()
-            }
-
-        // Delete my saved drafts
-        group.enter()
-        db.collection("issueDrafts")
-            .whereField("ownerID", isEqualTo: uid)
-            .getDocuments { snapshot, error in
-                remember(error)
-
-                snapshot?.documents.forEach { doc in
-                    group.enter()
-                    doc.reference.delete { error in
-                        remember(error)
-                        group.leave()
-                    }
-                }
-
-                group.leave()
-            }
-
-        // Delete my user document
-        group.enter()
-        db.collection("users").document(uid).delete { error in
-            remember(error)
-            group.leave()
-        }
-
-        group.notify(queue: .main) {
-            if let firstError {
-                completion(firstError)
-                return
-            }
-
-            user.delete { error in
-                if let error = error {
-                    completion(error.localizedDescription)
-                } else {
+        Task {
+            do {
+                try await CommerceBackendClient.shared.deleteMyAccountData()
+                await MainActor.run {
+                    try? Auth.auth().signOut()
                     completion(nil)
                 }
+            } catch {
+                await MainActor.run { completion(error.localizedDescription) }
             }
         }
     }

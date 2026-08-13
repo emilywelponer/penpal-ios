@@ -28,12 +28,12 @@ enum AppLocalization {
         "Privacy Policy": "Datenschutzerklärung",
         "How your data is used": "Wie deine Daten verwendet werden",
         "Sign out": "Abmelden",
-        "Delete profile permanently": "Profil dauerhaft löschen",
+        "Delete profile permanently": "Profil endgültig löschen",
         "Deleting account...": "Konto wird gelöscht...",
-        "Delete profile permanently?": "Profil dauerhaft löschen?",
-        "Delete everything": "Alles löschen",
+        "Delete profile permanently?": "Profil löschen",
+        "Delete everything": "Endgültig löschen",
         "Cancel": "Abbrechen",
-        "This deletes your account, profile, drafts, published issues, friend connections and groups you own.": "Das löscht dein Konto, Profil, Entwürfe, veröffentlichte Ausgaben, Freundschaften und Gruppen, die dir gehören.",
+        "This deletes your account, profile, drafts, published issues, friend connections and groups you own.": "Diese Aktion löscht dein Profil endgültig und kann nicht rückgängig gemacht werden.",
         "Confirm Password": "Passwort bestätigen",
         "Delete account permanently": "Konto dauerhaft löschen",
         "Incorrect password.": "Falsches Passwort.",
@@ -66,6 +66,9 @@ enum AppLocalization {
         "Stay in each other's chapters.": "Bleib Teil der Geschichten deiner Freunde.",
         "New Issue": "Neue Ausgabe",
         "Start creating": "Erstellen starten",
+        "Find Friends": "Freunde finden",
+        "Find friends": "Freunde finden",
+        "Search, requests and friends": "Freunde suchen und Anfragen verwalten",
         "Drafts": "Entwürfe",
         "Continue your unfinished issues": "Bearbeite deine unfertigen Ausgaben weiter",
         "Sign up": "Registrieren",
@@ -79,7 +82,7 @@ enum AppLocalization {
         "Username must be at least 3 characters.": "Der Benutzername muss mindestens 3 Zeichen haben.",
         "Username too long.": "Der Benutzername ist zu lang.",
         "This username is already taken.": "Dieser Benutzername ist bereits vergeben.",
-        "No throwbacks yet — published issues will appear here.": "Noch keine Rückblicke — veröffentlichte Ausgaben erscheinen hier.",
+        "No throwbacks yet — published issues will appear here.": "Noch keine Rückblicke – veröffentlichte Ausgaben erscheinen hier.",
         "Throwback": "Rückblick",
         "Delete": "Löschen",
         "Delete issue?": "Ausgabe löschen?",
@@ -107,7 +110,7 @@ enum AppLocalization {
         "User not found.": "Benutzer nicht gefunden.",
         "Already in group.": "Bereits in der Gruppe.",
         "Saved Drafts": "Gespeicherte Entwürfe",
-        "No drafts yet — start your first issue and save it here.": "Noch keine Entwürfe — starte deine erste Ausgabe und speichere sie hier.",
+        "No drafts yet — start your first issue and save it here.": "Noch keine Entwürfe – starte deine erste Ausgabe und speichere sie hier.",
         "Delete draft?": "Entwurf löschen?",
         "This draft will be permanently removed.": "Dieser Entwurf wird dauerhaft entfernt.",
         "Draft": "Entwurf",
@@ -166,8 +169,10 @@ enum AppLocalization {
         "Local draft could not be loaded:": "Lokaler Entwurf konnte nicht geladen werden:",
         "Publishing...": "Wird veröffentlicht...",
         "Publish selected groups": "In ausgewählten Gruppen veröffentlichen",
-        "slide to track progress": "schieben, um Fortschritt zu markieren",
-        "swipe to review": "wischen zum Bewerten"
+        "slide to track progress": "Zum Markieren des Fortschritts schieben",
+        "swipe to review": "Zum Bewerten wischen",
+        "Contents": "Inhalt",
+        "pages": "Seiten"
     ]
 
     private static let italian: [String: String] = german.mapValues { _ in "" }.merging([
@@ -226,7 +231,26 @@ enum AppLocalization {
         "Other": "Sonstiges",
         "Founder": "Founder",
         "Founder Supporter": "Founder Supporter",
-        "Choose what PenPal can notify you about.": "Wähle aus, worüber PenPal dich benachrichtigen darf.",
+        "Account settings": "Kontoeinstellungen",
+        "Email": "E-Mail",
+        "Notifications": "Benachrichtigungen",
+        "Incoming requests": "Eingehende Anfragen",
+        "Pending sent requests": "Gesendete Anfragen",
+        "INCOMING REQUESTS": "EINGEHENDE ANFRAGEN",
+        "PENDING SENT REQUESTS": "GESENDETE ANFRAGEN",
+        "No pending requests.": "Keine offenen Anfragen.",
+        "No sent requests pending.": "Keine gesendeten Anfragen offen.",
+        "Done": "Fertig",
+        "FIND FRIENDS": "FREUNDE FINDEN",
+        "Search by username": "Nach Benutzername suchen",
+        "Margin Notes": "Randnotizen",
+        "No margin notes on this page yet.": "Auf dieser Seite gibt es noch keine Randnotizen.",
+        "Leave a Note": "Notiz hinterlassen",
+        "Save Note": "Notiz speichern",
+        "Edit Your Note": "Notiz bearbeiten",
+        "Update Note": "Notiz aktualisieren",
+        "Publishing Reminder": "Veröffentlichungserinnerung",
+        "Choose what PenPal can notify you about.": "Wähle aus, worüber PenPal dich benachrichtigen soll.",
         "iPhone notifications": "iPhone-Benachrichtigungen",
         "Notifications are disabled in iPhone Settings.": "Benachrichtigungen sind in den iPhone-Einstellungen deaktiviert.",
         "Open iPhone Settings": "iPhone-Einstellungen öffnen",
@@ -237,7 +261,7 @@ enum AppLocalization {
         "Covers friend requests, groups, magazines, activity, margin notes and PenPal announcements.": "Gilt für Freundschaftsanfragen, Gruppen, Magazine, Aktivitäten, Randnotizen und PenPal-Ankündigungen.",
         "Enable notifications in iPhone Settings to receive PenPal notifications.": "Aktiviere Benachrichtigungen in den iPhone-Einstellungen, um PenPal-Benachrichtigungen zu erhalten.",
         "Friend requests and new friends": "Freundschaftsanfragen und neue Freunde",
-        "Group invitations and group updates": "Gruppeneinladungen und Gruppenupdates",
+        "Group invitations and group updates": "Gruppeneinladungen und Gruppen-Updates",
         "New magazines": "Neue Magazine",
         "Magazine activity": "Magazinaktivität",
         "Margin notes": "Randnotizen",
@@ -246,7 +270,7 @@ enum AppLocalization {
         "Notification preferences saved.": "Benachrichtigungseinstellungen gespeichert.",
         "Saving...": "Wird gespeichert...",
         "Your PenPal Plan": "Dein PenPal-Plan",
-        "Upgrade or change plan": "Plan upgraden oder ändern",
+        "Upgrade or change plan": "Plan upgraden oder wechseln",
         "Compare plans": "Pläne vergleichen",
         "Restore purchases": "Käufe wiederherstellen",
         "About PenPal": "Über PenPal",
@@ -322,11 +346,11 @@ enum AppLocalization {
         "PenPal Lab": "PenPal Lab",
         "Help shape the future of PenPal": "Aiuta a immaginare il futuro di PenPal",
         "Development Preview": "Anteprima di sviluppo",
-        "Suggest an idea": "Proponi un'idea",
-        "What should PenPal do next?": "Cosa dovrebbe fare PenPal adesso?",
+        "Suggest an idea": "Proponi un’idea",
+        "What should PenPal do next?": "Cosa immagini per PenPal?",
         "Suggestions may be visible to other Founder Supporters.": "I suggerimenti possono essere visibili ad altri Founder Supporter.",
-        "Submit suggestion": "Invia suggerimento",
-        "Submitting...": "Invio...",
+        "Submit suggestion": "Invia proposta",
+        "Submitting...": "Invio…",
         "Most supported": "Più sostenute",
         "Newest": "Più recenti",
         "Sort suggestions": "Ordina suggerimenti",
@@ -335,7 +359,7 @@ enum AppLocalization {
         "In progress": "In corso",
         "Released": "Pubblicato",
         "Not planned": "Non previsto",
-        "I want this too": "Lo vorrei anch'io",
+        "I want this too": "Lo vorrei anch’io",
         "Vote removed": "Voto rimosso",
         "Thanks for helping shape PenPal": "Grazie per aiutare PenPal a crescere",
         "Roadmap": "Roadmap",
@@ -343,7 +367,7 @@ enum AppLocalization {
         "Suggestions": "Suggerimenti",
         "No suggestions yet.": "Ancora nessun suggerimento.",
         "PenPal Lab is only available to Founder Supporters.": "PenPal Lab è disponibile solo per i Founder Supporter.",
-        "This area is not available for your account right now.": "Quest'area non è disponibile per il tuo account.",
+        "This area is not available for your account right now.": "Quest’area non è disponibile per il tuo account.",
         "Title": "Titolo",
         "Description": "Descrizione",
         "Category": "Categoria",
@@ -354,26 +378,26 @@ enum AppLocalization {
         "Other": "Altro",
         "Founder": "Founder",
         "Founder Supporter": "Founder Supporter",
-        "Choose what PenPal can notify you about.": "Scegli per cosa PenPal può inviarti notifiche.",
+        "Choose what PenPal can notify you about.": "Scegli quali notifiche ricevere da PenPal.",
         "iPhone notifications": "Notifiche iPhone",
         "Notifications are disabled in iPhone Settings.": "Le notifiche sono disattivate nelle Impostazioni iPhone.",
         "Open iPhone Settings": "Apri Impostazioni iPhone",
         "Open Settings": "Apri Impostazioni",
         "Allow PenPal notifications": "Consenti notifiche PenPal",
-        "Tap to allow iPhone notifications for PenPal.": "Tocca per consentire le notifiche iPhone per PenPal.",
-        "Manage iPhone notification delivery in Settings.": "Gestisci la consegna delle notifiche iPhone nelle Impostazioni.",
-        "Covers friend requests, groups, magazines, activity, margin notes and PenPal announcements.": "Include richieste di amicizia, gruppi, riviste, attività, note a margine e novità da PenPal.",
+        "Tap to allow iPhone notifications for PenPal.": "Tocca per attivare le notifiche di PenPal sull’iPhone.",
+        "Manage iPhone notification delivery in Settings.": "Gestisci le notifiche dell’iPhone nelle Impostazioni.",
+        "Covers friend requests, groups, magazines, activity, margin notes and PenPal announcements.": "Include richieste di amicizia, gruppi, magazine, attività, note a margine e novità da PenPal.",
         "Enable notifications in iPhone Settings to receive PenPal notifications.": "Attiva le notifiche nelle Impostazioni iPhone per ricevere notifiche da PenPal.",
         "Friend requests and new friends": "Richieste di amicizia e nuovi amici",
         "Group invitations and group updates": "Inviti e aggiornamenti dei gruppi",
-        "New magazines": "Nuove riviste",
-        "Magazine activity": "Attività delle riviste",
+        "New magazines": "Nuovi magazine",
+        "Magazine activity": "Attività dei magazine",
         "Margin notes": "Note a margine",
         "Replies and reactions": "Risposte e reazioni",
         "PenPal announcements": "Novità da PenPal",
         "Notification preferences saved.": "Preferenze notifiche salvate.",
         "Your PenPal Plan": "Il tuo piano PenPal",
-        "Upgrade or change plan": "Aggiorna o cambia piano",
+        "Upgrade or change plan": "Cambia o migliora il piano",
         "Compare plans": "Confronta i piani",
         "Restore purchases": "Ripristina acquisti",
         "About PenPal": "Informazioni su PenPal",
@@ -381,11 +405,11 @@ enum AppLocalization {
         "Free": "Gratis",
         "Premium": "Premium",
         "Included features": "Funzioni incluse",
-        "Create magazines, save drafts, publish to groups and collect your memories in PenPal.": "Crea riviste, salva bozze, pubblica nei gruppi e raccogli i tuoi ricordi in PenPal.",
+        "Create magazines, save drafts, publish to groups and collect your memories in PenPal.": "Crea magazine, salva bozze, pubblica nei gruppi e raccogli i tuoi ricordi in PenPal.",
         "Renewal information": "Informazioni sul rinnovo",
         "No renewal information is available yet.": "Non sono ancora disponibili informazioni sul rinnovo.",
         "Manage subscription": "Gestisci abbonamento",
-        "A quieter place for shared monthly magazines.": "Uno spazio più tranquillo per riviste mensili condivise.",
+        "A quieter place for shared monthly magazines.": "Uno spazio più quieto per magazine mensili condivisi.",
         "Founder Supporter Hub": "Hub Founder Supporter",
         "Submit feedback": "Invia feedback",
         "Voting and roadmap": "Voti e roadmap",
@@ -412,34 +436,34 @@ enum AppLocalization {
         "Founder Supporter is a one-time purchase and does not renew.": "Founder Supporter è un acquisto una tantum e non si rinnova.",
         "No active paid plan.": "Nessun piano a pagamento attivo.",
         "Subscriptions are not available in this development build yet.": "Gli abbonamenti non sono ancora disponibili in questa build di sviluppo.",
-        "Create magazines, save drafts and share with your groups.": "Crea riviste, salva bozze e condividile con i tuoi gruppi.",
+        "Create magazines, save drafts and share with your groups.": "Crea magazine, salva bozze e condividi con i tuoi gruppi.",
         "Extra creative tools and more room to shape each issue.": "Strumenti creativi extra e più spazio per dare forma a ogni numero.",
-        "The fullest PenPal experience for frequent magazine makers.": "L’esperienza PenPal più completa per chi crea riviste spesso.",
+        "The fullest PenPal experience for frequent magazine makers.": "L’esperienza PenPal più completa per chi crea magazine con frequenza.",
         "Includes PenPal Lab, voting, roadmap previews and the Founder badge.": "Include PenPal Lab, votazioni, anteprime della roadmap e il badge Founder.",
         "Ideas and voting": "Idee e votazioni",
         "Early access to PenPal Lab experiments.": "Accesso anticipato agli esperimenti di PenPal Lab.",
         "Vote on ideas and help shape the roadmap.": "Vota le idee e contribuisci alla roadmap.",
         "A subtle Founder badge inside PenPal Lab.": "Un badge Founder discreto dentro PenPal Lab.",
         "PenPal Lab is included with Founder Supporter.": "PenPal Lab è incluso con Founder Supporter.",
-        "Upgrade to unlock ideas, voting, feedback and the roadmap.": "Fai l’upgrade per sbloccare idee, votazioni, feedback e roadmap.",
+        "Upgrade to unlock ideas, voting, feedback and the roadmap.": "Passa a Founder Supporter per accedere a idee, voti, feedback e roadmap.",
         "Shape upcoming ideas, vote on suggestions and follow what is planned.": "Contribuisci alle prossime idee, vota i suggerimenti e segui ciò che è in programma.",
         "Share thoughtful product ideas with the PenPal team.": "Condividi idee di prodotto curate con il team PenPal.",
         "Support ideas and see what is planned, in progress or released.": "Sostieni le idee e scopri cosa è pianificato, in corso o pubblicato.",
         "See what Founder Supporter unlocks as PenPal grows.": "Scopri cosa sblocca Founder Supporter mentre PenPal cresce.",
         "A subtle mark for early supporters inside PenPal Lab.": "Un segno discreto per i primi sostenitori dentro PenPal Lab.",
-        "You need to be logged in.": "Devi effettuare l'accesso.",
+        "You need to be logged in.": "Devi effettuare l’accesso.",
         "Please add a title.": "Aggiungi un titolo.",
         "Please add a description.": "Aggiungi una descrizione.",
-        "Please keep your suggestion a little shorter.": "Rendi il suggerimento un po' più breve.",
+        "Please keep your suggestion a little shorter.": "Rendi il suggerimento un po’ più breve.",
         "Settings": "Impostazioni",
         "Language": "Lingua",
         "Privacy Policy": "Informativa sulla privacy",
         "How your data is used": "Come usiamo i tuoi dati",
         "Sign out": "Esci",
         "Delete profile permanently": "Elimina il profilo definitivamente",
-        "Deleting account...": "Eliminazione dell'account...",
-        "Delete profile permanently?": "Vuoi eliminare il profilo definitivamente?",
-        "Delete everything": "Elimina tutto",
+        "Deleting account...": "Eliminazione dell’account…",
+        "Delete profile permanently?": "Eliminare definitivamente il profilo?",
+        "Delete everything": "Elimina definitivamente",
         "Cancel": "Annulla",
         "Confirm Password": "Conferma password",
         "Password": "Password",
@@ -447,15 +471,15 @@ enum AppLocalization {
         "Incorrect password.": "Password non corretta.",
         "Profile": "Profilo",
         "Edit profile": "Modifica profilo",
-        "Change profile photo": "Cambia foto profilo",
+        "Change profile photo": "Cambia foto del profilo",
         "Display name": "Nome visualizzato",
         "Save profile": "Salva profilo",
         "Your name": "Il tuo nome",
         "Username": "Nome utente",
         "Confirm password": "Conferma password",
         "Create Profile": "Crea profilo",
-        "Please enter your email.": "Inserisci la tua email.",
-        "Password reset email sent.": "Email per reimpostare la password inviata.",
+        "Please enter your email.": "Inserisci la tua e-mail.",
+        "Password reset email sent.": "E-mail per reimpostare la password inviata.",
         "Profile saved.": "Profilo salvato.",
         "Friends": "Amici",
         "My friends": "I miei amici",
@@ -475,8 +499,8 @@ enum AppLocalization {
         "Log in": "Accedi",
         "Forgot password?": "Password dimenticata?",
         "Reset password": "Reimposta password",
-        "Enter your email and we’ll send you a link to set a new password.": "Inserisci la tua email e ti manderemo un link per creare una nuova password.",
-        "Send reset email": "Invia email di reimpostazione",
+        "Enter your email and we’ll send you a link to set a new password.": "Inserisci la tua e-mail e ti invieremo un link per creare una nuova password.",
+        "Send reset email": "Invia e-mail di reimpostazione",
         "Please enter a username.": "Inserisci un nome utente.",
         "Passwords do not match.": "Le password non coincidono.",
         "Username must be at least 3 characters.": "Il nome utente deve avere almeno 3 caratteri.",
@@ -495,7 +519,7 @@ enum AppLocalization {
         "Members": "Membri",
         "No members yet": "Ancora nessun membro",
         "Create group": "Crea gruppo",
-        "Creating...": "Creazione...",
+        "Creating...": "Creazione…",
         "Group name": "Nome del gruppo",
         "people · add or view members": "persone · aggiungi o vedi membri",
         "Member added.": "Membro aggiunto.",
@@ -503,25 +527,25 @@ enum AppLocalization {
         "You already have a group with this name.": "Hai già un gruppo con questo nome.",
         "User not found.": "Utente non trovato.",
         "Already in group.": "Già nel gruppo.",
-        "This deletes your account, profile, drafts, published issues, friend connections and groups you own.": "Questo elimina account, profilo, bozze, giornali pubblicati, amicizie e gruppi che possiedi.",
-        "New Issue": "Nuovo giornale",
-        "Continue your unfinished issues": "Continua i giornali non finiti",
-        "Generated issue": "Giornale generato",
-        "Preview finished magazine": "Anteprima giornale finito",
-        "Edit magazine": "Modifica giornale",
-        "Finished magazine preview": "Anteprima giornale finito",
-        "Finish issue": "Completa giornale",
-        "Group magazines": "Giornali del gruppo",
-        "You will no longer receive magazines from this group.": "Non riceverai più giornali da questo gruppo.",
-        "1 issue": "1 giornale",
-        "issues": "giornali",
-        "photo": "foto",
-        "write here…": "scrivi qui…",
-        "No throwbacks yet — published issues will appear here.": "Ancora niente pubblicato - i giornali pubblicati appariranno qui.",
+        "This deletes your account, profile, drafts, published issues, friend connections and groups you own.": "Questa azione elimina account, profilo, bozze, magazine pubblicati, amicizie e gruppi di tua proprietà.",
+        "New Issue": "Nuovo numero",
+        "Continue your unfinished issues": "Riprendi i numeri ancora aperti",
+        "Generated issue": "Numero generato",
+        "Preview finished magazine": "Anteprima del magazine finito",
+        "Edit magazine": "Modifica magazine",
+        "Finished magazine preview": "Anteprima del magazine finito",
+        "Finish issue": "Completa il numero",
+        "Group magazines": "Magazine del gruppo",
+        "You will no longer receive magazines from this group.": "Non riceverai più magazine da questo gruppo.",
+        "1 issue": "1 numero",
+        "issues": "numeri",
+        "photo": "Foto",
+        "write here…": "Scrivi qui…",
+        "No throwbacks yet — published issues will appear here.": "Ancora nessun ricordo – i magazine pubblicati appariranno qui.",
         "Throwback": "Ricordi",
-        "Delete issue?": "Eliminare il giornale?",
-        "This issue will be permanently removed.": "Questo giornale verrà eliminato definitivamente.",
-        "No drafts yet — start your first issue and save it here.": "Ancora nessuna bozza - inizia il tuo primo giornale e salvalo qui.",
+        "Delete issue?": "Eliminare il numero?",
+        "This issue will be permanently removed.": "Questo numero verrà eliminato definitivamente.",
+        "No drafts yet — start your first issue and save it here.": "Ancora nessuna bozza – inizia il tuo primo numero e salvalo qui.",
         "Saved Drafts": "Bozze salvate",
         "Delete draft?": "Eliminare la bozza?",
         "This draft will be permanently removed.": "Questa bozza verrà eliminata definitivamente.",
@@ -532,41 +556,41 @@ enum AppLocalization {
         "Preview draft": "Anteprima bozza",
         "Publish draft": "Pubblica bozza",
         "This draft has no pages to publish.": "Questa bozza non ha pagine da pubblicare.",
-        "Loading draft...": "Caricamento bozza...",
+        "Loading draft...": "Caricamento bozza…",
         "This draft has no editable pages.": "Questa bozza non ha pagine modificabili.",
-        "This draft is still loading or has no editable pages.": "Questa bozza sta ancora caricando o non ha pagine modificabili.",
+        "This draft is still loading or has no editable pages.": "Questa bozza è ancora in caricamento o non ha pagine modificabili.",
         "No pages saved.": "Nessuna pagina salvata.",
         "Page": "Pagina",
         "of": "di",
         "Edit": "Modifica",
-        "No magazines published this month yet.": "Nessun giornale pubblicato questo mese.",
+        "No magazines published this month yet.": "Nessun magazine pubblicato questo mese.",
         "Preprint review": "Revisione prima della stampa",
-        "Delete any page you do not want. The layout is locked to the PowerPoint template. Text boxes can be written in; photo boxes keep their size and only the photo inside can be zoomed or moved.": "Elimina le pagine che non vuoi. Il layout resta bloccato al modello PowerPoint. Puoi scrivere nei campi di testo; i riquadri foto mantengono la dimensione e solo la foto dentro puo essere ingrandita o spostata.",
-        "Delete any pages you don't want to include. Magazines can contain up to 30 pages.": "Elimina le pagine che non vuoi includere. I giornali possono contenere fino a 30 pagine.",
+        "Delete any page you do not want. The layout is locked to the PowerPoint template. Text boxes can be written in; photo boxes keep their size and only the photo inside can be zoomed or moved.": "Elimina le pagine che non vuoi. Il layout resta fedele al modello PowerPoint: puoi scrivere nei campi di testo, mentre i riquadri foto mantengono la loro forma e lasciano muovere solo l’immagine all’interno.",
+        "Delete any pages you don't want to include. Magazines can contain up to 30 pages.": "Elimina le pagine che non vuoi includere. Ogni magazine può contenere fino a 30 pagine.",
         "Edit selected pages": "Modifica le pagine selezionate",
         "No pages to edit.": "Nessuna pagina da modificare.",
         "Edit this page": "Modifica questa pagina",
         "Delete page": "Elimina pagina",
         "No pages to preview.": "Nessuna pagina da vedere in anteprima.",
         "Preview": "Anteprima",
-        "Add sections or pages": "Aggiungi capitoli o pagine",
-        "All sections are already in this issue.": "Tutte le sezioni sono gia in questo giornale.",
+        "Add sections or pages": "Aggiungi sezioni o pagine",
+        "All sections are already in this issue.": "Tutte le sezioni sono già in questo numero.",
         "Add selected": "Aggiungi selezionati",
         "Publish to groups": "Pubblica nei gruppi",
         "You are not in any groups yet.": "Non sei ancora in nessun gruppo.",
         "Sections added. Save the draft to keep these changes.": "Sezioni aggiunte. Salva la bozza per mantenere le modifiche.",
         "Page deleted. Save the draft to keep this change.": "Pagina eliminata. Salva la bozza per mantenere la modifica.",
         "Create at least one page first.": "Crea prima almeno una pagina.",
-        "Draft could not be prepared for saving.": "Non e stato possibile preparare la bozza per il salvataggio.",
+        "Draft could not be prepared for saving.": "Non è stato possibile preparare la bozza per il salvataggio.",
         "Draft could not be saved:": "Impossibile salvare la bozza:",
         "Draft saved. You can find it in Drafts.": "Bozza salvata. La trovi in Bozze.",
         "Select at least one group.": "Seleziona almeno un gruppo.",
-        "An issue can contain up to 30 pages.": "Un giornale puo contenere fino a 30 pagine.",
-        "Your magazine has more than 30 pages. Delete pages before publishing.": "Il tuo giornale ha più di 30 pagine. Elimina alcune pagine prima di pubblicare.",
-        "Your issue has too many photos. Please keep it under 50 photos.": "Il tuo giornale ha troppe foto. Tienilo sotto le 50 foto.",
-        "Issue published. You can find it in old magazines.": "Giornale pubblicato. Lo trovi nei vecchi giornali.",
-        "Issue could not be published:": "Impossibile pubblicare il giornale:",
-        "Saving...": "Salvataggio...",
+        "An issue can contain up to 30 pages.": "Un numero può contenere fino a 30 pagine.",
+        "Your magazine has more than 30 pages. Delete pages before publishing.": "Il tuo magazine ha più di 30 pagine. Elimina alcune pagine prima di pubblicare.",
+        "Your issue has too many photos. Please keep it under 50 photos.": "Il tuo numero ha troppe foto. Rimani sotto le 50 immagini.",
+        "Issue published. You can find it in old magazines.": "Numero pubblicato. Lo trovi nell’archivio.",
+        "Issue could not be published:": "Impossibile pubblicare il numero:",
+        "Saving...": "Salvataggio…",
         "Save for later": "Salva per dopo",
         "Save Draft": "Salva bozza",
         "Continue Draft": "Continua bozza",
@@ -575,10 +599,33 @@ enum AppLocalization {
         "Draft saved locally.": "Bozza salvata sul dispositivo.",
         "Continue editing your saved local draft": "Continua a modificare la bozza salvata sul dispositivo",
         "Local draft could not be loaded:": "Impossibile caricare la bozza locale:",
-        "Publishing...": "Pubblicazione...",
+        "Publishing...": "Pubblicazione…",
         "Publish selected groups": "Pubblica nei gruppi selezionati",
-        "slide to track progress": "scorri per segnare il progresso",
-        "swipe to review": "scorri per recensire"
+        "slide to track progress": "Scorri per segnare i progressi",
+        "swipe to review": "Scorri per valutare",
+        "Find Friends": "Trova amici",
+        "Find friends": "Trova amici",
+        "Search, requests and friends": "Cerca persone, richieste e amici",
+        "Search by username": "Cerca per nome utente",
+        "Incoming requests": "Richieste ricevute",
+        "Pending sent requests": "Richieste inviate",
+        "INCOMING REQUESTS": "RICHIESTE RICEVUTE",
+        "PENDING SENT REQUESTS": "RICHIESTE INVIATE",
+        "No pending requests.": "Nessuna richiesta in sospeso.",
+        "No sent requests pending.": "Nessuna richiesta inviata in sospeso.",
+        "Done": "Fine",
+        "Save": "Salva",
+        "Send": "Invia",
+        "Sending...": "Invio…",
+        "Contents": "Indice",
+        "pages": "pagine",
+        "Margin Notes": "Note a margine",
+        "No margin notes on this page yet.": "Non ci sono ancora note a margine su questa pagina.",
+        "Leave a Note": "Lascia una nota",
+        "Save Note": "Salva nota",
+        "Edit Your Note": "Modifica la tua nota",
+        "Update Note": "Aggiorna nota",
+        "Publishing Reminder": "Promemoria di pubblicazione"
     ]
 
     private static let spanishExtras = [
@@ -930,18 +977,18 @@ enum AppLocalization {
         "PenPal user": "Utilisateur PenPal",
         "Back": "Retour",
         "Enabled": "Activées",
-        "Disabled": "Désactivées",
+        "Disabled": "Désactivé",
         "Not Determined": "Pas encore décidé",
         "Margin note notifications": "Notifications des notes en marge",
         "Notify me when someone leaves a note.": "Préviens-moi quand quelqu’un laisse une note.",
         "PenPal Lab": "PenPal Lab",
-        "Help shape the future of PenPal": "Aide à imaginer l'avenir de PenPal",
+        "Help shape the future of PenPal": "Aide à imaginer l’avenir de PenPal",
         "Development Preview": "Aperçu de développement",
         "Suggest an idea": "Proposer une idée",
         "What should PenPal do next?": "Que devrait faire PenPal ensuite ?",
-        "Suggestions may be visible to other Founder Supporters.": "Les suggestions peuvent être visibles par d'autres Founder Supporters.",
+        "Suggestions may be visible to other Founder Supporters.": "Les suggestions peuvent être visibles par d’autres Founder Supporters.",
         "Submit suggestion": "Envoyer la suggestion",
-        "Submitting...": "Envoi...",
+        "Submitting...": "Envoi…",
         "Most supported": "Les plus soutenues",
         "Newest": "Les plus récentes",
         "Sort suggestions": "Trier les suggestions",
@@ -956,7 +1003,7 @@ enum AppLocalization {
         "Roadmap": "Feuille de route",
         "No roadmap items yet.": "Aucun élément dans la feuille de route.",
         "Suggestions": "Suggestions",
-        "No suggestions yet.": "Aucune suggestion pour l'instant.",
+        "No suggestions yet.": "Aucune suggestion pour l’instant.",
         "PenPal Lab is only available to Founder Supporters.": "PenPal Lab est réservé aux Founder Supporters.",
         "This area is not available for your account right now.": "Cet espace n'est pas disponible pour ton compte pour le moment.",
         "Title": "Titre",
@@ -969,14 +1016,14 @@ enum AppLocalization {
         "Other": "Autre",
         "Founder": "Founder",
         "Founder Supporter": "Founder Supporter",
-        "Choose what PenPal can notify you about.": "Choisis ce que PenPal peut t’envoyer comme notifications.",
+        "Choose what PenPal can notify you about.": "Choisis les notifications que PenPal peut t’envoyer.",
         "iPhone notifications": "Notifications iPhone",
         "Notifications are disabled in iPhone Settings.": "Les notifications sont désactivées dans les Réglages de l’iPhone.",
         "Open iPhone Settings": "Ouvrir les Réglages iPhone",
         "Open Settings": "Ouvrir les Réglages",
         "Allow PenPal notifications": "Autoriser les notifications PenPal",
         "Tap to allow iPhone notifications for PenPal.": "Touche pour autoriser les notifications iPhone pour PenPal.",
-        "Manage iPhone notification delivery in Settings.": "Gère l’envoi des notifications iPhone dans les Réglages.",
+        "Manage iPhone notification delivery in Settings.": "Gère les notifications iPhone dans les Réglages.",
         "Covers friend requests, groups, magazines, activity, margin notes and PenPal announcements.": "Inclut les demandes d’amis, les groupes, les magazines, l’activité, les notes en marge et les annonces PenPal.",
         "Enable notifications in iPhone Settings to receive PenPal notifications.": "Active les notifications dans les Réglages iPhone pour recevoir les notifications PenPal.",
         "Friend requests and new friends": "Demandes d’amis et nouveaux amis",
@@ -1047,12 +1094,11 @@ enum AppLocalization {
         "Please add a description.": "Ajoute une description.",
         "Please keep your suggestion a little shorter.": "Raccourcis un peu ta suggestion.",
         "Settings": "Réglages",
-        "Language": "Langue",
         "Privacy Policy": "Politique de confidentialité",
         "How your data is used": "Comment tes données sont utilisées",
         "Sign out": "Se déconnecter",
         "Delete profile permanently": "Supprimer le profil définitivement",
-        "Deleting account...": "Suppression du compte...",
+        "Deleting account...": "Suppression du compte…",
         "Delete profile permanently?": "Supprimer le profil définitivement ?",
         "Delete everything": "Tout supprimer",
         "Cancel": "Annuler",
@@ -1117,7 +1163,7 @@ enum AppLocalization {
         "Members": "Membres",
         "No members yet": "Aucun membre pour l’instant",
         "Create group": "Créer un groupe",
-        "Creating...": "Création...",
+        "Creating...": "Création…",
         "Group name": "Nom du groupe",
         "people · add or view members": "personnes · ajouter ou voir les membres",
         "Member added.": "Membre ajouté.",
@@ -1130,6 +1176,7 @@ enum AppLocalization {
         "Publish to": "Publier dans",
         "Continue editing": "Continuer l’édition",
         "Preview draft": "Aperçu du brouillon",
+        "Review draft": "Relire le brouillon",
         "Publish draft": "Publier le brouillon",
         "No pages saved.": "Aucune page enregistrée.",
         "Page": "Page",
@@ -1139,9 +1186,9 @@ enum AppLocalization {
         "Edit selected pages": "Modifier les pages choisies",
         "Generated issue": "Numéro généré",
         "No pages to edit.": "Aucune page à modifier.",
-        "Preview finished magazine": "Aperçu du magazine terminé",
+        "Preview finished magazine": "Terminer l’aperçu",
         "Edit magazine": "Modifier le magazine",
-        "Finished magazine preview": "Aperçu du magazine terminé",
+        "Finished magazine preview": "Terminer l’aperçu",
         "Edit this page": "Modifier cette page",
         "Delete page": "Supprimer la page",
         "Preview": "Aperçu",
@@ -1161,7 +1208,7 @@ enum AppLocalization {
         "Delete draft?": "Supprimer le brouillon ?",
         "This draft will be permanently removed.": "Ce brouillon sera supprimé définitivement.",
         "This draft has no pages to publish.": "Ce brouillon n’a aucune page à publier.",
-        "Loading draft...": "Chargement du brouillon...",
+        "Loading draft...": "Chargement du brouillon…",
         "This draft has no editable pages.": "Ce brouillon n’a aucune page modifiable.",
         "This draft is still loading or has no editable pages.": "Ce brouillon charge encore ou n’a aucune page modifiable.",
         "No magazines published this month yet.": "Aucun magazine publié ce mois-ci.",
@@ -1182,7 +1229,7 @@ enum AppLocalization {
         "Your issue has too many photos. Please keep it under 50 photos.": "Ton numéro contient trop de photos. Reste sous 50 photos.",
         "Issue published. You can find it in old magazines.": "Numéro publié. Tu le trouveras dans les anciens magazines.",
         "Issue could not be published:": "Le numéro n’a pas pu être publié :",
-        "Saving...": "Enregistrement...",
+        "Saving...": "Enregistrement…",
         "Save for later": "Enregistrer pour plus tard",
         "Save Draft": "Enregistrer le brouillon",
         "Continue Draft": "Continuer le brouillon",
@@ -1191,10 +1238,32 @@ enum AppLocalization {
         "Draft saved locally.": "Brouillon enregistré sur l’appareil.",
         "Continue editing your saved local draft": "Continue à modifier le brouillon enregistré sur l’appareil",
         "Local draft could not be loaded:": "Le brouillon local n’a pas pu être chargé :",
-        "Publishing...": "Publication...",
+        "Publishing...": "Publication…",
         "Publish selected groups": "Publier dans les groupes sélectionnés",
-        "slide to track progress": "glisse pour suivre le progrès",
-        "swipe to review": "glisse pour noter"
+        "Find Friends": "Trouver des amis",
+        "Find friends": "Trouver des amis",
+        "Search, requests and friends": "Recherche, demandes et amis",
+        "Search by username": "Rechercher par nom d’utilisateur",
+        "Incoming requests": "Demandes reçues",
+        "Pending sent requests": "Demandes envoyées",
+        "No pending requests.": "Aucune demande en attente.",
+        "No sent requests pending.": "Aucune demande envoyée en attente.",
+        "Done": "Terminé",
+        "Account settings": "Paramètres du compte",
+        "Email": "E-mail",
+        "Language": "Langue",
+        "Notifications": "Notifications",
+        "Publishing Reminder": "Rappel de publication",
+        "Save": "Enregistrer",
+        "Group Members": "Membres du groupe",
+        "Share group link": "Partager le lien du groupe",
+        "Invite people to join this group": "Invite des personnes à rejoindre ce groupe",
+        "Copy invite link": "Copier le lien d’invitation",
+        "Save the invitation link to your clipboard": "Copie le lien d’invitation dans le presse-papiers",
+        "Cover": "Couverture",
+        "Contents": "Sommaire",
+        "slide to track progress": "fais glisser pour suivre tes progrès",
+        "swipe to review": "fais glisser pour noter"
     ]
 }
 
@@ -1221,6 +1290,8 @@ func localizedFullMonthName(for month: Int, languageRaw: String) -> String {
 
 func localizedMemberCount(_ count: Int, languageRaw: String) -> String {
     switch AppLanguage(rawValue: languageRaw) ?? .english {
+    case .german:
+        return "\(count) \(count == 1 ? "Mitglied" : "Mitglieder")"
     case .spanish:
         return "\(count) \(count == 1 ? "miembro" : "miembros")"
     default:
@@ -1230,6 +1301,8 @@ func localizedMemberCount(_ count: Int, languageRaw: String) -> String {
 
 func localizedIssueCount(_ count: Int, languageRaw: String) -> String {
     switch AppLanguage(rawValue: languageRaw) ?? .english {
+    case .german:
+        return "\(count) \(count == 1 ? "Ausgabe" : "Ausgaben")"
     case .spanish:
         return "\(count) \(count == 1 ? "edición" : "ediciones")"
     default:
@@ -1239,6 +1312,8 @@ func localizedIssueCount(_ count: Int, languageRaw: String) -> String {
 
 func localizedMonthCount(_ count: Int, languageRaw: String) -> String {
     switch AppLanguage(rawValue: languageRaw) ?? .english {
+    case .german:
+        return "\(count) \(count == 1 ? "Monat" : "Monate")"
     case .spanish:
         return "\(count) \(count == 1 ? "mes" : "meses")"
     default:
@@ -1248,6 +1323,8 @@ func localizedMonthCount(_ count: Int, languageRaw: String) -> String {
 
 func localizedPostedProgress(posted: Int, total: Int, languageRaw: String) -> String {
     switch AppLanguage(rawValue: languageRaw) ?? .english {
+    case .german:
+        return "\(posted) von \(max(total, 0)) Mitgliedern \(posted == 1 ? "hat veröffentlicht" : "haben veröffentlicht")"
     case .spanish:
         return "\(posted) de \(max(total, 0)) miembros \(posted == 1 ? "ha publicado" : "han publicado")"
     default:
@@ -1257,10 +1334,26 @@ func localizedPostedProgress(posted: Int, total: Int, languageRaw: String) -> St
 
 func localizedRemainingCharacters(_ count: Int, languageRaw: String) -> String {
     switch AppLanguage(rawValue: languageRaw) ?? .english {
+    case .german:
+        return "Noch \(count) Zeichen"
     case .spanish:
         return "\(count) \(count == 1 ? "carácter restante" : "caracteres restantes")"
     default:
         return "\(count) characters left"
+    }
+}
+
+func localizedDateTime(_ date: Date, languageRaw: String) -> String {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .short
+    switch AppLanguage(rawValue: languageRaw) ?? .english {
+    case .german:
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.dateFormat = "d. MMMM yyyy 'um' HH:mm"
+        return formatter.string(from: date)
+    default:
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 
@@ -1283,9 +1376,24 @@ func localizedDisplayDate(_ date: Date, languageRaw: String) -> String {
     return formatter.string(from: date)
 }
 
+func localizedDraftTitle(owner: String, languageRaw: String) -> String {
+    switch AppLanguage(rawValue: languageRaw) ?? .english {
+    case .german:
+        return "Entwurf von \(owner)"
+    default:
+        return "\(owner)'s Draft Issue"
+    }
+}
+
 func localizedIssueTitle(owner: String, month: Int, languageRaw: String) -> String {
     let monthName = localizedFullMonthName(for: month, languageRaw: languageRaw)
     switch AppLanguage(rawValue: languageRaw) ?? .english {
+    case .german:
+        let possessiveSuffix = owner.last.map { "sxzß".contains(String($0).lowercased()) } == true ? nil : "s"
+        if let possessiveSuffix {
+            return "\(owner)\(possessiveSuffix) \(monthName)-Ausgabe"
+        }
+        return "\(monthName)-Ausgabe von \(owner)"
     case .spanish:
         return "\(owner): edición de \(monthName)"
     default:

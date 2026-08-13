@@ -89,25 +89,25 @@ support@penpal-app.com
             return """
 Ultimo aggiornamento: giugno 2026
 
-PenPal raccoglie e conserva le informazioni necessarie per fornire il servizio.
+PenPal raccoglie e conserva solo le informazioni necessarie a offrire il servizio.
 
 Informazioni che raccogliamo:
-• Indirizzo email
-• Username
+• Indirizzo e-mail
+• Nome utente
 • Informazioni del profilo
 • Appartenenze ai gruppi
-• Connessioni di amicizia
+• Collegamenti di amicizia
 • Magazine e immagini caricate
 
 Come usiamo le informazioni:
 • Per creare e gestire il tuo account
-• Per permettere agli utenti di connettersi con amici
+• Per permettere agli utenti di restare in contatto con gli amici
 • Per pubblicare e condividere magazine
-• Per migliorare la funzionalità dell’app
+• Per migliorare il funzionamento dell’app
 
-Non vendiamo informazioni personali.
+Non vendiamo dati personali.
 
-I tuoi dati sono archiviati in modo sicuro tramite i servizi Firebase forniti da Google.
+I tuoi dati sono conservati in modo sicuro tramite i servizi Firebase forniti da Google.
 
 Puoi eliminare definitivamente il tuo account in qualsiasi momento dalle Impostazioni. L’eliminazione rimuove il profilo e i contenuti associati.
 

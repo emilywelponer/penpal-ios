@@ -1,6 +1,5 @@
 import SwiftUI
 import StoreKit
-import UIKit
 import FirebaseAuth
 
 // MARK: Subscription Navigation
@@ -32,6 +31,7 @@ struct SubscriptionDetailsView: View {
     @StateObject private var entitlementRepository = BackendEntitlementRepository.shared
     var plan: PenPalPlan = .free
     @State private var message = ""
+    @State private var showsManageSubscriptions = false
 
     private var displayedPlan: PenPalPlan {
         entitlementRepository.currentPlan
@@ -64,6 +64,7 @@ struct SubscriptionDetailsView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.gray.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 20))
 
@@ -75,11 +76,12 @@ struct SubscriptionDetailsView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.gray.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 20))
 
                 Button {
-                    SubscriptionActions.openManageSubscriptions()
+                    showsManageSubscriptions = true
                 } label: {
                     Text(appText("Manage subscription", languageRaw))
                         .font(.headline)
@@ -105,6 +107,7 @@ struct SubscriptionDetailsView: View {
         .background(PenPalStyle.background.ignoresSafeArea())
         .navigationTitle(appText("Your PenPal Plan", languageRaw))
         .navigationBarTitleDisplayMode(.inline)
+        .manageSubscriptionsSheet(isPresented: $showsManageSubscriptions)
     }
 }
 
@@ -131,12 +134,14 @@ struct SubscriptionUpgradeView: View {
                 PremiumPurchaseCard(
                     monthlyProduct: storeKitService.premiumMonthlyProduct,
                     annualProduct: storeKitService.premiumAnnualProduct,
+                    productLoadState: storeKitService.productLoadState,
                     isPurchasing: purchasingIdentifier != nil,
                     purchase: purchase
                 )
 
                 FounderPurchaseCard(
                     founderProduct: storeKitService.founderProduct,
+                    productLoadState: storeKitService.productLoadState,
                     isPurchasing: purchasingIdentifier != nil,
                     purchase: purchase
                 )
@@ -217,13 +222,31 @@ struct SubscriptionUpgradeView: View {
     }
 }
 
-enum SubscriptionActions {
-    @MainActor
-    static func openManageSubscriptions() {
-        guard let url = URL(string: "https://apps.apple.com/account/subscriptions") else { return }
-        UIApplication.shared.open(url)
+private enum StoreKitPriceDisplayState {
+    case loading
+    case available(String)
+    case unavailable
+
+    var canPurchase: Bool {
+        if case .available = self { return true }
+        return false
+    }
+}
+
+private func priceDisplayState(for product: Product?, loadState: StoreKitProductLoadState) -> StoreKitPriceDisplayState {
+    if let product {
+        return .available(product.displayPrice)
     }
 
+    switch loadState {
+    case .idle, .loading:
+        return .loading
+    case .loaded, .unavailable, .failed:
+        return .unavailable
+    }
+}
+
+enum SubscriptionActions {
     @MainActor
     static func restorePurchases(languageRaw: String) async -> String {
         let errorMessage = await StoreKitPurchaseService.shared.restorePurchases()
@@ -238,6 +261,7 @@ private struct PremiumPurchaseCard: View {
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
     let monthlyProduct: Product?
     let annualProduct: Product?
+    let productLoadState: StoreKitProductLoadState
     let isPurchasing: Bool
     let purchase: (PenPalProductIdentifier) -> Void
 
@@ -252,13 +276,13 @@ private struct PremiumPurchaseCard: View {
 
             purchaseButton(
                 title: appText("Premium Monthly", languageRaw),
-                price: monthlyProduct?.displayPrice,
+                priceState: priceDisplayState(for: monthlyProduct, loadState: productLoadState),
                 identifier: .premiumMonthly
             )
 
             purchaseButton(
                 title: appText("Premium Annual", languageRaw),
-                price: annualProduct?.displayPrice,
+                priceState: priceDisplayState(for: annualProduct, loadState: productLoadState),
                 identifier: .premiumAnnual
             )
         }
@@ -267,30 +291,49 @@ private struct PremiumPurchaseCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
-    private func purchaseButton(title: String, price: String?, identifier: PenPalProductIdentifier) -> some View {
+    private func purchaseButton(title: String, priceState: StoreKitPriceDisplayState, identifier: PenPalProductIdentifier) -> some View {
         Button {
             purchase(identifier)
         } label: {
             HStack {
                 Text(title)
                 Spacer()
-                Text(price ?? appText("Unavailable", languageRaw))
+                priceLabel(for: priceState)
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)
             .padding()
-            .background(price == nil ? Color.gray : Color.black)
+            .background(priceState.canPurchase ? Color.black : Color.gray)
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
-        .disabled(isPurchasing || price == nil)
+        .disabled(isPurchasing || !priceState.canPurchase)
+    }
+
+    @ViewBuilder
+    private func priceLabel(for state: StoreKitPriceDisplayState) -> some View {
+        switch state {
+        case .loading:
+            ProgressView()
+                .controlSize(.small)
+                .tint(.white)
+        case .available(let price):
+            Text(price)
+        case .unavailable:
+            Text(appText("Unavailable", languageRaw))
+        }
     }
 }
 
 private struct FounderPurchaseCard: View {
     @AppStorage("appLanguage") private var languageRaw: String = AppLanguage.english.rawValue
     let founderProduct: Product?
+    let productLoadState: StoreKitProductLoadState
     let isPurchasing: Bool
     let purchase: (PenPalProductIdentifier) -> Void
+
+    private var founderPriceState: StoreKitPriceDisplayState {
+        priceDisplayState(for: founderProduct, loadState: productLoadState)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -307,19 +350,33 @@ private struct FounderPurchaseCard: View {
                 HStack {
                     Text(appText("Become a Founder Supporter", languageRaw))
                     Spacer()
-                    Text(founderProduct?.displayPrice ?? appText("Unavailable", languageRaw))
+                    priceLabel(for: founderPriceState)
                 }
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
                 .padding()
-                .background(founderProduct == nil ? Color.gray : Color.black)
+                .background(founderPriceState.canPurchase ? Color.black : Color.gray)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
             }
-            .disabled(isPurchasing || founderProduct == nil)
+            .disabled(isPurchasing || !founderPriceState.canPurchase)
         }
         .padding()
         .background(Color.gray.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    @ViewBuilder
+    private func priceLabel(for state: StoreKitPriceDisplayState) -> some View {
+        switch state {
+        case .loading:
+            ProgressView()
+                .controlSize(.small)
+                .tint(.white)
+        case .available(let price):
+            Text(price)
+        case .unavailable:
+            Text(appText("Unavailable", languageRaw))
+        }
     }
 }
 
