@@ -1,0 +1,98 @@
+{
+  "identifier" : "C91F66F7-6C35-4D1E-A9B9-9978B3990F79",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "24.99",
+      "familyShareable" : false,
+      "internalID" : "BD5808D5-9E2D-41D8-8A2F-A38922F5E40D",
+      "localizations" : [
+        {
+          "description" : "Permanent Founder Supporter badge and access to PenPal Lab.",
+          "displayName" : "Founder Supporter",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.emily.penpal.founder",
+      "referenceName" : "PenPal Founder Supporter",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_timeRate" : 1
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "3EF59468-A712-40C5-9C06-1164A27A6A03",
+      "localizations" : [
+        {
+          "customAppName" : "PenPal",
+          "locale" : "en_US",
+          "name" : "PenPal Premium"
+        }
+      ],
+      "name" : "PenPal Premium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "2.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "E4D80C3B-7A1C-4016-A91D-52234521503E",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Complete monthly magazine archive access while subscribed.",
+              "displayName" : "Premium Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.emily.penpal.premium.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "PenPal Premium Monthly",
+          "subscriptionGroupID" : "3EF59468-A712-40C5-9C06-1164A27A6A03",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "24.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "2F893C51-A7DA-466E-883E-02231A52B842",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Complete monthly magazine archive access while subscribed.",
+              "displayName" : "Premium Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.emily.penpal.premium.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "PenPal Premium Annual",
+          "subscriptionGroupID" : "3EF59468-A712-40C5-9C06-1164A27A6A03",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
